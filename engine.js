@@ -1,335 +1,244 @@
-/* ============================================================
-   engine.js  —  판정 · 산출 · 최적화 · 민감도
-   ============================================================ */
+/* =========================================================================
+ * engine.js — 입력 파싱 · 계산 · 리포트 렌더링
+ * ========================================================================= */
+import * as T from "./tables.js?v=20260819";
 
-class MissingRuleError extends Error {
-  constructor(m){ super(m); this.name="MissingRuleError"; }
-}
-
-/* ---------- 공통 헬퍼 ---------- */
-const ctx = {
-  pickByDate(rows, d){
-    return rows.find(r => r.from<=d && (!r.to || r.to>=d)) || null;
-  },
-  totalGfa(p){ return p.buildings.reduce((s,b)=>s+b.gfa_total,0); },
-  netGfa(p){   return p.buildings.reduce((s,b)=>s+(b.gfa_total-(b.gfa_parking||0)),0); },
-  totalHouseholds(p){ return p.buildings.reduce((s,b)=>s+(b.households||0),0); },
-  allUses(p){ return [...new Set(p.buildings.flatMap(b=>b.uses.map(u=>u.code)))]; },
-  espReportRequired(p){ return ctx.totalGfa(p) >= 500; },
-  isResidentialDominant(p){
-    let res=0, non=0;
-    p.buildings.forEach(b=>b.uses.forEach(u=>{
-      (u.sector==="주거" ? (res+=u.gfa) : (non+=u.gfa));
-    }));
-    return res > non;
-  },
-  unitEnergy(use, sector, d){
-    const rows = UNIT_ENERGY.filter(r=>r.use===use && r.sector===sector && r.from<=d);
-    if(!rows.length) throw new MissingRuleError(`단위에너지사용량 없음: ${sector}/${use} @ ${d}`);
-    return rows.sort((a,b)=>b.from.localeCompare(a.from))[0];
-  },
-  coeff(key, d){
-    const r = COEFF.find(c=>c.key===key && c.from<=d && (!c.to||c.to>=d));
-    if(!r) throw new MissingRuleError(`보정계수 없음: ${key} @ ${d}`);
-    return r;
-  },
-  regionFactor(sido){
-    const v = REGION_FACTOR[sido];
-    if(v==null) throw new MissingRuleError(`지역계수 없음: ${sido}`);
-    return v;
-  }
+const $  = (id) => document.getElementById(id);
+const num = (id) => {
+  const v = parseFloat(String($(id).value).replace(/,/g, "").trim());
+  return isNaN(v) ? 0 : v;
 };
+const fmt = (n, d = 0) =>
+  n == null || isNaN(n) ? "-" : n.toLocaleString("ko-KR",
+    { minimumFractionDigits: d, maximumFractionDigits: d });
 
-/* ---------- 수요량 산정 ---------- */
-function computeDemand(p){
-  const d  = p.project.permit_expected_date;
-  const rf = ctx.regionFactor(p.location.sido);
-  const lines = [];
-  let total = 0;
+$("ver").textContent = `데이터 버전 ${T.DATA_VERSION} · ${T.SOURCE_VERSION}`;
 
-  p.buildings.forEach(b=>{
-    // 주차장 면적을 용도별 면적 비례로 차감
-    const gross = b.uses.reduce((s,u)=>s+u.gfa,0);
-    const park  = b.gfa_parking||0;
-    b.uses.forEach(u=>{
-      const net = u.gfa - park*(u.gfa/gross);
-      const ue  = ctx.unitEnergy(u.code, u.sector, d);
-      const e   = net * ue.v * rf;
-      total += e;
-      lines.push({ bldg:b.bldg_id, use:u.code, sector:u.sector,
-                   gross:u.gfa, net:+net.toFixed(1), unitEnergy:ue.v,
-                   region:rf, energy:+e.toFixed(0),
-                   prov:`단위에너지사용량 ${ue.v} (${ue.from}~)`+(ue.verified?"":" ※미검증") });
+/* ---------- 시·도 변경 시 적용 지자체 기준 미리보기 ---------- */
+function updateHint() {
+  const { key, fallback } = T.resolveLocalStandard($("sido").value, $("sigungu").value);
+  $("localHint").textContent = fallback
+    ? `적용 기준: 그 외 지역 (별도 설계기준 없음)`
+    : `적용 기준: ${key} (${T.LOCAL_STANDARD.data[key].revision ?? "-"})`;
+}
+$("sido").addEventListener("change", updateHint);
+$("sigungu").addEventListener("input", updateHint);
+updateHint();
+
+/* ---------- 용도 구성 파싱 ---------- */
+function parseUseMix(text, clientType) {
+  const notes = [];
+  const rows = String(text).replace(/，/g, ",").split(/\n+/)
+    .map(s => s.trim()).filter(Boolean)
+    .map((line, i) => {
+      const p = line.split(",").map(s => s.trim());
+      if (p.length < 2)
+        throw new Error(`${i + 1}행 형식 오류: "${line}" → "용도,부문,면적" 또는 "용도,면적"`);
+
+      let use, sector, area;
+      if (p.length === 2) { use = p[0]; sector = null; area = parseFloat(p[1]); }
+      else { use = p[0]; sector = p[1] || null; area = parseFloat(p[2]); }
+
+      if (isNaN(area) || area <= 0) throw new Error(`${i + 1}행 면적 오류: "${line}"`);
+
+      const ue = T.getUnitEnergy(use, clientType, sector);
+      if (ue.note) notes.push(`${i + 1}행 ${use}: ${ue.note}`);
+      return { use: T.normUse(use), sector: ue.sector, area, unit: ue.value };
     });
-  });
-
-  const e = p.energy_forecast;
-  const demandToe = e.elec_kwh_y*(p.options?.useElecPrimary ? TOE.KWH_ELEC_PRIMARY : TOE.KWH_FINAL)
-                  + e.fuel_toe_y;
-
-  return { kwh: total, toe: demandToe, lines,
-           note:"주차장 면적은 용도별 면적 비례 차감됨" };
+  if (!rows.length) throw new Error("용도 구성이 비어 있습니다.");
+  return { rows, notes };
 }
 
-/* ---------- 제도 판정 매트릭스 ---------- */
-function evaluateRegulations(p){
-  const out=[];
-  REGULATIONS.forEach(r=>{
-    let t, req=null, extra=null, err=null;
-    try{
-      t = r.test(p, ctx);
-      if(t.apply){
-        req   = r.required(p, ctx, t);
-        extra = r.extra ? r.extra(p, ctx, req) : null;
-      }
-    }catch(e){ err = e.message; }
-    out.push({ id:r.id, name:r.name, basis:r.basis, authority:r.authority,
-               calc:r.calc, blocksPermit:r.blocksPermit, leadDays:r.leadDays,
-               apply:!!(t&&t.apply), unknown:!!(t&&t.unknown),
-               why:t?t.why:"", required:req, extra, error:err });
-  });
-  return out;
-}
+/* ---------- 메인 ---------- */
+function run() {
+  const out = [];
+  const push = (t, title, body) =>
+    out.push(`<div class="alert ${t}"><b>${title}</b>${body}</div>`);
 
-/* ============================================================
-   LP 솔버 (2단계 심플렉스)
-   minimize c·x  s.t.  A x (op) b,  0 ≤ x
-   ============================================================ */
-function simplex(c, A, b, ops){
-  const m=A.length, n=c.length;
-  const rows = A.map((r,i)=>({a:[...r], b:b[i], op:ops[i]}));
-  rows.forEach(r=>{ if(r.b<0){ r.a=r.a.map(v=>-v); r.b=-r.b;
-    r.op = r.op==="<="?">=":(r.op===">="?"<=":"="); }});
+  try {
+    const clientType  = $("clientType").value;
+    const actType     = $("actType").value;
+    const sido        = $("sido").value;
+    const sigungu     = $("sigungu").value;
+    const totalArea   = num("totalArea");
+    const parkingArea = num("parkingArea");
+    const households  = num("households");
+    const zebCert     = $("zebCert").checked;
+    const year        = new Date($("permitDate").value || Date.now()).getFullYear();
 
-  let col=n; const slack=[],surp=[],art=[];
-  rows.forEach((r,i)=>{
-    if(r.op==="<=") slack.push({r:i,c:col++});
-    else if(r.op===">="){ surp.push({r:i,c:col++}); art.push({r:i,c:col++}); }
-    else art.push({r:i,c:col++});
-  });
-  const N=col;
-  const T = rows.map(()=>new Array(N+1).fill(0));
-  rows.forEach((r,i)=>{ for(let j=0;j<n;j++)T[i][j]=r.a[j]; T[i][N]=r.b; });
-  slack.forEach(s=>T[s.r][s.c]=1);
-  surp .forEach(s=>T[s.r][s.c]=-1);
-  art  .forEach(s=>T[s.r][s.c]=1);
+    /* 1. 용도·면적 */
+    const { rows, notes } = parseUseMix($("useMix").value, clientType);
+    const useSum = rows.reduce((s, r) => s + r.area, 0);
+    notes.forEach(n => push("info", "부문 자동보정", n));
 
-  const basis=new Array(m).fill(-1);
-  slack.forEach(s=>basis[s.r]=s.c);
-  art  .forEach(s=>basis[s.r]=s.c);
+    if (Math.abs(useSum - totalArea) > 0.5)
+      push("warn", "연면적 불일치",
+        `총 연면적 ${fmt(totalArea, 1)}㎡ vs 용도면적 합계 ${fmt(useSum, 1)}㎡ ` +
+        `(차이 ${fmt(Math.abs(useSum - totalArea), 1)}㎡). 한쪽으로 통일하세요.`);
 
-  const isArt=new Array(N).fill(false); art.forEach(s=>isArt[s.c]=true);
+    if (parkingArea === 0 && num("basementArea") > 0)
+      push("warn", "주차장 면적 미입력",
+        `지하개발 ${fmt(num("basementArea"))}㎡가 있으나 주차장 면적이 0입니다. ` +
+        `연면적 산입 여부를 확인하세요.`);
 
-  const pivot=(l,e)=>{
-    const pv=T[l][e];
-    for(let j=0;j<=N;j++) T[l][j]/=pv;
-    for(let i=0;i<m;i++){
-      if(i===l) continue;
-      const f=T[i][e];
-      if(Math.abs(f)>1e-12) for(let j=0;j<=N;j++) T[i][j]-=f*T[l][j];
+    /* 2. 예상에너지사용량 */
+    const rf = T.getRegionFactor(sido, sigungu);
+    const netRatio = totalArea > 0 ? (totalArea - parkingArea) / totalArea : 1;
+    const expected = rows.reduce((s, r) => s + r.area * netRatio * r.unit, 0) * rf.value;
+
+    /* 3. 적용 의무비율 */
+    const ovRatio = num("ovRatio");
+    const local = T.getLocalTier(sido, sigungu, households, { clientType, zebCertified: zebCert });
+    const isResidential = households > 0;
+
+    let ratio = null, ratioSrc = "";
+    if (ovRatio > 0) { ratio = ovRatio; ratioSrc = `심의 반영값 (${$("ovReason").value})`; }
+    else if (clientType === "public") {
+      ratio = T.publicRatio(year); ratioSrc = `공공기관 공급의무비율 ${year}년`;
+    } else if (isResidential && typeof local.re === "number") {
+      ratio = local.re; ratioSrc = `${local.key} 녹색건축물 설계기준 ${local.tier}등급`;
     }
-    basis[l]=e;
-  };
 
-  const run=(cost, mask)=>{
-    for(let it=0; it<8000; it++){
-      const z=new Array(N+1).fill(0);
-      for(let j=0;j<=N;j++){ let s=0; for(let i=0;i<m;i++) s+=cost[basis[i]]*T[i][j]; z[j]=s; }
-      let e=-1, best=1e-9;
-      for(let j=0;j<N;j++){
-        if(mask && !mask[j]) continue;
-        const rc=z[j]-cost[j];
-        if(rc>best){best=rc; e=j;}
-      }
-      if(e<0) return {ok:true, obj:z[N]};
-      let l=-1, mn=Infinity;
-      for(let i=0;i<m;i++) if(T[i][e]>1e-9){
-        const r=T[i][N]/T[i][e]; if(r<mn-1e-12){mn=r; l=i;}
-      }
-      if(l<0) return {ok:false, reason:"unbounded"};
-      pivot(l,e);
+    /* ---------- 리포트 ---------- */
+    out.push(`<h3>1. 산정 기초</h3><table>
+      <tr><th>프로젝트</th><td>${$("pjtName").value}</td></tr>
+      <tr><th>위치 / 지역계수</th><td>${sido} ${sigungu} — ${rf.key} × ${rf.value}</td></tr>
+      <tr><th>발주자 / 행위유형</th><td>${clientType === "public" ? "공공" : "민간"} / ${actType}</td></tr>
+      <tr><th>연면적 (주차장 제외)</th><td class="num">${fmt(totalArea - parkingArea, 1)} ㎡</td></tr>
+    </table>`);
+
+    out.push(`<h3>2. 용도별 예상에너지사용량</h3><table>
+      <tr><th>용도</th><th>부문</th><th>면적(㎡)</th><th>원단위</th><th>소계(kWh/yr)</th></tr>
+      ${rows.map(r => `<tr><td>${r.use}</td><td>${r.sector}</td>
+        <td class="num">${fmt(r.area, 1)}</td><td class="num">${fmt(r.unit, 2)}</td>
+        <td class="num">${fmt(r.area * netRatio * r.unit * rf.value)}</td></tr>`).join("")}
+      <tr><th colspan="4">합계 (지역계수 반영)</th>
+          <td class="num"><b>${fmt(expected)}</b></td></tr>
+      <tr><th colspan="4">toe 환산 (최종에너지)</th>
+          <td class="num">${fmt(expected * T.TOE.KWH_FINAL, 1)} toe</td></tr>
+    </table>`);
+
+    /* 4. 비주거 안내 */
+    if (!isResidential) {
+      push("info", "지자체 설계기준 — 세대수 기준 미적용",
+        `${T.LOCAL_STANDARD.source}은 주거 기준입니다. 세대수 0(비주거)이므로 티어 판정을 생략합니다. ` +
+        `해당 지자체의 비주거 조항을 별도 확인하세요.`);
+    } else {
+      out.push(`<h3>3. 지자체 설계기준</h3><table>
+        <tr><th>적용 기준</th><td>${local.key} (${local.revision ?? "-"})
+            ${local.recommend ? " · 권장사항" : ""}</td></tr>
+        <tr><th>등급 구분</th><td>${local.tier ?? "-"} (${fmt(households)}세대)</td></tr>
+        <tr><th>녹색건축인증</th><td>${local.green ?? "기준 없음"}</td></tr>
+        <tr><th>에너지효율등급</th><td>${local.energy ? local.energy + "등급" : "기준 없음"}</td></tr>
+        <tr><th>신재생 의무비율</th><td>${
+          typeof local.re === "number" ? local.re + " %"
+          : local.re === "GREEN_HOME_ART7" ? "친환경주택 건설기준 제7조 준수"
+          : local.capacityRatio ? `전체 설비용량의 ${local.capacityRatio}%`
+          : "기준 없음"}</td></tr>
+      </table>`);
+      local.notes.forEach(n => push("info", `${local.key} 유의사항`, n));
+      if (local.verify)
+        push("warn", "수치 검증 필요",
+          `${local.key}의 신재생 비율은 원문 표 정렬 오류 가능성이 있습니다. 조례 원문 대조를 권합니다.`);
     }
-    return {ok:false, reason:"iteration limit"};
-  };
 
-  // Phase 1
-  const c1=new Array(N).fill(0); art.forEach(s=>c1[s.c]=1);
-  const r1=run(c1,null);
-  if(!r1.ok) return {status:r1.reason};
-  if(r1.obj>1e-6) return {status:"infeasible"};
-
-  // 인공변수를 기저에서 축출
-  for(let i=0;i<m;i++){
-    if(isArt[basis[i]]){
-      let e=-1;
-      for(let j=0;j<N;j++) if(!isArt[j] && Math.abs(T[i][j])>1e-9){e=j;break;}
-      if(e>=0) pivot(i,e);
+    /* 5. 서울 비주거 지열·수열 룰 */
+    const seoulRule = T.LOCAL_STANDARD.data["서울"].geoHydroRule;
+    if (local.key === "서울" && !isResidential) {
+      const nonResi = totalArea - parkingArea;
+      if (nonResi >= seoulRule.thresholdArea)
+        push("warn", "서울시 지열·수열 의무",
+          `비주거 ${fmt(nonResi)}㎡ ≥ ${fmt(seoulRule.thresholdArea)}㎡ → ` +
+          `의무비율의 ${seoulRule.minShareOfObligation * 100}% 이상을 지열 또는 수열로 설치해야 합니다.`);
+      else
+        push("ok", "서울시 지열·수열 의무 — 해당 없음",
+          `비주거 ${fmt(nonResi)}㎡ < ${fmt(seoulRule.thresholdArea)}㎡ 이므로 적용되지 않습니다.`);
     }
+
+    /* 6. 신재생 설치규모 */
+    if (ratio) {
+      const targetKwh = expected * ratio / 100;
+      const roofCap = num("roofArea") / (T.PV_SPEC.AREA_PER_KW * T.SAFETY_AREA);
+
+      const cand = ["태양광_고정식", "태양광_입면BAPV", "BIPV",
+                    "지열_수직밀폐형", "연료전지_PEMFC", "연료전지_SOFC"];
+
+      out.push(`<h3>4. 신재생에너지 설치규모</h3>
+        <table>
+          <tr><th>적용 의무비율</th><td>${ratio} % <span class="muted">(${ratioSrc})</span></td></tr>
+          <tr><th>필요 생산량</th><td class="num">${fmt(targetKwh)} kWh/yr</td></tr>
+        </table>
+        <table>
+          <tr><th>에너지원</th><th>필요 용량</th><th>소요면적(㎡)</th><th>개산공사비(원)</th></tr>
+          ${cand.map(k => {
+            const s = T.RE_SOURCE.data[k];
+            const size = T.requiredSize(k, targetKwh);
+            const area = s.unit === "kW" ? T.requiredArea(k, size) : size * T.SAFETY_AREA;
+            const cost = T.estimateCost(k, size);
+            return `<tr><td>${k}</td>
+              <td class="num">${fmt(size, 1)} ${s.unit}</td>
+              <td class="num">${fmt(area, 1)}</td>
+              <td class="num">${cost ? fmt(cost) : "-"}</td></tr>`;
+          }).join("")}
+        </table>`);
+
+      const pvSize = T.requiredSize("태양광_고정식", targetKwh);
+      if (pvSize > roofCap)
+        push("warn", "옥상 단독 설치 불가",
+          `옥상 PV 최대 ${fmt(roofCap, 1)}kW < 필요 ${fmt(pvSize, 1)}kW. ` +
+          `입면 BAPV·BIPV 또는 지열·연료전지 병행이 필요합니다.`);
+      else
+        push("ok", "옥상 PV 단독 충족 가능",
+          `필요 ${fmt(pvSize, 1)}kW ≤ 옥상 최대 ${fmt(roofCap, 1)}kW`);
+    } else {
+      push("info", "신재생 의무비율 미적용",
+        `민간 · ${isResidential ? "세대수 기준 미달" : "비주거"} 조건으로 자동 산정되는 의무비율이 없습니다. ` +
+        `심의 반영값을 입력하면 그 값으로 산정합니다.`);
+    }
+
+    /* 7. ZEB */
+    const zebApplies = T.ZEB.mandatoryActs.includes(actType);
+    const zebGradeReq = T.ZEB.grade4Uses.includes(rows[0].use) ? 4 : 5;
+    if (!zebApplies) {
+      push("info", "ZEB 의무 — 해당 없음",
+        `행위유형 "${actType}"은 ZEB 의무대상(${T.ZEB.mandatoryActs.join("·")})이 아닙니다. ` +
+        `다만 민간 비주거는 2025.12.31 이후 에너지절약설계기준 개정으로 ZEB5 수준이 요구됩니다.`);
+    } else {
+      push("info", "ZEB 의무 대상",
+        `연면적 1,000㎡ 이상 · ${rows[0].use} → 공공 의무등급 ${zebGradeReq}등급. BEMS 설치 필수.`);
+    }
+    const pe = num("primaryEnergy");
+    if (pe > 0) {
+      const g = T.zebGrade({ primary: pe, isResidential });
+      push(g ? "ok" : "warn", "ZEB 등급 판정",
+        `1차에너지소요량 ${fmt(pe, 1)} kWh/㎡yr → ${g ?? "등급 미달"}`);
+    }
+
+    /* 8. 에너지사용계획 협의 */
+    const th = T.ENERGY_PLAN[clientType];
+    const elec = num("annualElec"), fuel = num("annualFuel");
+    const hitE = elec >= th.elecKwh, hitF = fuel >= th.fuelToe;
+    push(hitE || hitF ? "warn" : "ok", "에너지사용계획 협의",
+      `전력 ${fmt(elec)} kWh (기준 ${fmt(th.elecKwh)}) · 연료 ${fmt(fuel)} toe (기준 ${fmt(th.fuelToe)}) → ` +
+      `${hitE || hitF ? "<b>협의 대상</b>" : "대상 아님"}`);
+
+    /* 9. 실사용 예측치와의 괴리 */
+    if (elec > 0) {
+      const gap = elec / expected;
+      if (gap > 1.5 || gap < 0.67)
+        push("warn", "표준 원단위와 실사용 예측치 괴리",
+          `표준 산정 ${fmt(expected)} kWh vs 입력 전력 ${fmt(elec)} kWh (${gap.toFixed(2)}배). ` +
+          `IT부하 등 특수부하가 있는 시설은 표준 원단위가 실제를 반영하지 못합니다. ` +
+          `의무비율 판정은 표준 원단위, 협의 대상 판정은 실사용 예측치로 분리 표기하세요.`);
+    }
+
+  } catch (e) {
+    out.unshift(`<div class="alert error"><b>계산 중단</b>${e.message}
+      <div class="muted" style="margin-top:6px;">임의 기본값을 쓰지 않고 중단했습니다. 입력을 확인하세요.</div></div>`);
   }
-  // Phase 2
-  const c2=new Array(N).fill(0); for(let j=0;j<n;j++) c2[j]=c[j];
-  const mask=new Array(N).fill(true); art.forEach(s=>mask[s.c]=false);
-  const r2=run(c2,mask);
-  if(!r2.ok) return {status:r2.reason};
 
-  const x=new Array(n).fill(0);
-  for(let i=0;i<m;i++) if(basis[i]<n) x[basis[i]]=T[i][N];
-  return {status:"optimal", x, obj:r2.obj};
+  $("report").innerHTML = out.join("");
 }
 
-/* ---------- 제약조건 생성 ---------- */
-function buildProblem(p, regs, demand, opts={}){
-  const d = p.project.permit_expected_date;
-  const sys = (p.systems_enabled || COEFF.map(c=>c.key))
-                .map(k=>ctx.coeff(k,d))
-                .filter(s=>opts.excludeSources ? !opts.excludeSources.includes(s.key) : true);
-
-  const c=[], A=[], b=[], ops=[], labels=[];
-  sys.forEach(s=>c.push(s.cost));
-
-  const add=(coefs, sign, rhs, label)=>{ A.push(coefs); ops.push(sign); b.push(rhs); labels.push(label); };
-
-  // (1) 보정계수 기반 의무비율 — 적용 제도 중 최대값 하나만
-  const corrected = regs.filter(r=>r.apply && r.calc==="RATIO_CORRECTED" && r.required?.pct>0);
-  if(corrected.length){
-    const gov = corrected.reduce((a,x)=>x.required.pct>a.required.pct?x:a);
-    add(sys.map(s=>s.gen*s.cf), ">=", gov.required.pct/100*demand.kwh,
-        `${gov.name} ${gov.required.pct}% (보정계수 기준)`);
-
-    // 서울 재생열 부가의무
-    const eh = corrected.map(r=>r.extra).find(Boolean);
-    if(eh) add(sys.map(s=>HEAT_SOURCES.includes(s.key)? s.gen*s.cf : 0), ">=",
-               eh.shareOfRequired * gov.required.pct/100*demand.kwh,
-               `${eh.name} (의무량의 ${eh.shareOfRequired*100}%)`);
-  }
-
-  // (2) toe 실물 기준
-  const toeReg = regs.find(r=>r.apply && r.calc==="RATIO_TOE_RAW");
-  if(toeReg) add(sys.map(s=>s.gen*TOE.KWH_FINAL), ">=",
-                 toeReg.required.pct/100*demand.toe,
-                 `${toeReg.name} ${toeReg.required.pct}% (toe 실물 기준)`);
-
-  // (3) ZEB 자립률 (1차에너지소요량 입력 시)
-  const zeb = regs.find(r=>r.apply && r.calc==="RATIO_ZEB");
-  if(zeb && p.energy_forecast.primary_kwh_y)
-    add(sys.map(s=>s.gen), ">=", zeb.required.pct/100*p.energy_forecast.primary_kwh_y,
-        `ZEB ${zeb.required.zebGrade}등급 자립률 ${zeb.required.pct}%`);
-
-  // (4) 면적 제약
-  const sc = p.site_capacity;
-  const roof = sc.roof_available_m2/SAFETY_AREA;
-  const fac  = (sc.facade_south_m2+sc.facade_east_m2+sc.facade_west_m2)/SAFETY_AREA;
-  if(sys.some(s=>s.mount==="roof"))
-    add(sys.map(s=>s.mount==="roof"?s.area:0), "<=", roof,
-        `옥상 가용면적 ${roof.toFixed(0)}㎡ (여유율 ${SAFETY_AREA})`);
-  if(sys.some(s=>s.mount==="facade"))
-    add(sys.map(s=>s.mount==="facade"?s.area:0), "<=", fac,
-        `입면 가용면적 ${fac.toFixed(0)}㎡ (여유율 ${SAFETY_AREA})`);
-
-  // (5) 물리적 불가 설비 차단
-  if(!sc.geothermal_feasible)
-    sys.forEach((s,i)=>{ if(s.key.startsWith("GEO")){
-      const r=new Array(sys.length).fill(0); r[i]=1; add(r,"<=",0,`${s.name} 설치 불가`); }});
-  if(!sc.gas_capacity_ok)
-    sys.forEach((s,i)=>{ if(s.key.startsWith("FC")){
-      const r=new Array(sys.length).fill(0); r[i]=1; add(r,"<=",0,`${s.name} 가스용량 부족`); }});
-  if(!sc.water_source)
-    sys.forEach((s,i)=>{ if(s.key.startsWith("HYDRO")){
-      const r=new Array(sys.length).fill(0); r[i]=1; add(r,"<=",0,`${s.name} 수원 없음`); }});
-
-  return {sys, c, A, b, ops, labels};
-}
-
-/* ---------- 최적화 실행 + 민감도 ---------- */
-function optimize(p, regs, demand, opts={}){
-  const pr = buildProblem(p, regs, demand, opts);
-  const r  = simplex(pr.c, pr.A, pr.b, pr.ops);
-  if(r.status!=="optimal")
-    return {status:r.status, constraints:pr.labels,
-            hint:"면적 제약 완화, 설비 추가 허용, 목표비율 재확인 필요"};
-
-  const mix = pr.sys.map((s,i)=>({
-    key:s.key, name:s.name, unit:s.unit,
-    capacity:+r.x[i].toFixed(2),
-    area:+(r.x[i]*s.area).toFixed(1),
-    cost:+(r.x[i]*s.cost).toFixed(0),
-    genCorrected:+(r.x[i]*s.gen*s.cf).toFixed(0),
-    genRaw:+(r.x[i]*s.gen).toFixed(0),
-    prov:`${s.src} / ${s.from}~`
-  })).filter(m=>m.capacity>1e-4);
-
-  // 민감도: 각 제약 RHS +5% 시 비용 증가
-  const sens=[];
-  pr.A.forEach((_,k)=>{
-    if(pr.ops[k]!==">=") return;
-    const b2=[...pr.b]; b2[k]*=1.05;
-    const r2=simplex(pr.c,pr.A,b2,pr.ops);
-    sens.push({ constraint:pr.labels[k],
-                deltaCost: r2.status==="optimal" ? +(r2.obj-r.obj).toFixed(0) : null,
-                status:r2.status });
-  });
-
-  return { status:"optimal", mix,
-           totalCost:+r.obj.toFixed(0),
-           constraints:pr.labels,
-           sensitivity:sens.sort((a,b)=>(b.deltaCost||0)-(a.deltaCost||0)),
-           binding: sens.filter(s=>s.deltaCost>1).map(s=>s.constraint) };
-}
-
-/* ---------- toe 목표 스윕 ---------- */
-function sweepToeTarget(p, regs, demand, from=0.35, to=0.55, step=0.05){
-  const out=[];
-  for(let t=from; t<=to+1e-9; t+=step){
-    const cp = JSON.parse(JSON.stringify(p));
-    cp.overrides = {...(cp.overrides||{}), esp_review_target_pct:+t.toFixed(2)};
-    const rg = evaluateRegulations(cp);
-    const r  = optimize(cp, rg, demand);
-    out.push({ target:+t.toFixed(2),
-               cost: r.status==="optimal"? r.totalCost : null,
-               status:r.status });
-  }
-  return out;
-}
-
-/* ---------- 대안 시나리오 ---------- */
-function scenarios(p, regs, demand){
-  return [
-    { name:"Option#1 최소비용", ...optimize(p,regs,demand) },
-    { name:"Option#2 연료전지 배제(유지관리 최소)",
-      ...optimize(p,regs,demand,{excludeSources:["FC_PEM","FC_SOFC"]}) },
-    { name:"Option#3 BIPV 배제(입면 보존)",
-      ...optimize(p,regs,demand,{excludeSources:["BIPV"]}) }
-  ];
-}
-
-/* ---------- 전체 실행 ---------- */
-function runReview(p){
-  const warnings=[];
-  if(!REGION_FACTOR._verified) warnings.push("⚠ 지역계수 미검증 — 전 지역 1.00 임시값. 지침 별표 확인 필요.");
-  COEFF.filter(c=>!c.verified).forEach(c=>warnings.push(`⚠ 보정계수 미검증: ${c.name}`));
-  UNIT_ENERGY.filter(u=>!u.verified).forEach(u=>warnings.push(`⚠ 단위에너지사용량 미검증: ${u.sector}/${u.use}`));
-
-  const demand = computeDemand(p);
-  const regs   = evaluateRegulations(p);
-  regs.filter(r=>r.unknown).forEach(r=>warnings.push(`⚠ ${r.name}: ${r.why}`));
-  regs.filter(r=>r.error).forEach(r=>warnings.push(`✖ ${r.name}: ${r.error}`));
-
-  const opt   = optimize(p, regs, demand);
-  const alts  = scenarios(p, regs, demand);
-  const sweep = regs.some(r=>r.apply && r.calc==="RATIO_TOE_RAW")
-                ? sweepToeTarget(p, regs, demand) : null;
-
-  // 일정 역산
-  const lead = Math.max(0, ...regs.filter(r=>r.apply).map(r=>r.leadDays));
-  const permit = new Date(p.project.permit_expected_date);
-  const start  = new Date(permit.getTime() - lead*864e5);
-
-  return {
-    meta:{ dataVersion:DATA_VERSION, reviewedAt:new Date().toISOString(),
-           basisDate:p.project.permit_expected_date },
-    demand, regulations:regs, optimum:opt, alternatives:alts, toeSweep:sweep,
-    schedule:{ maxLeadDays:lead, startBy:start.toISOString().slice(0,10),
-               blockers:regs.filter(r=>r.apply&&r.blocksPermit).map(r=>r.name) },
-    warnings
-  };
-}
+$("run").addEventListener("click", run);
+window.reTool = { ...T, run };   // 콘솔 디버깅용
