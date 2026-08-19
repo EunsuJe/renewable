@@ -177,159 +177,181 @@ export const PUBLIC_RE_RATIO = {
  *  re: 신재생 공급의무비율(%)                                            */
 export const LOCAL_STANDARD = {
   effective_from: "2025-01-01", effective_to: null,
+  source: "2025.12 가이드라인 표1 (주거 기준)",
+  scope: "residential",   // ⚠ 비주거에는 세대수 티어 적용 불가
   data: {
     "서울": {
-      revision: "2025.01 개정",
+      revision: "2025.01",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1++", re: 11.0 },
-        { tier: "나", households:  300, green: "우량", energy: "1+",  re: 10.5 },
-        { tier: "다", households:   30, green: "일반", energy: "1",   re: 10.0 },
-        { tier: "라", households:    0, green: null,   energy: null,  re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: "1++", re: 11.0 },
+        { tier: "나", hh:  300, green: "우량", energy: "1+",  re: 10.5 },
+        { tier: "다", hh:   30, green: "일반", energy: "1",   re: 10.0 },
+        { tier: "라", hh:    0, green: null,   energy: null,  re: null }
       ],
-      zebExemptRE: true,   // ZEB 취득 시 신재생 기준 적용 제외
-      notes: [
-        "환경영향평가 대상: 녹색건축 최우수 + ZEB 5등급 이상",
-        "비주거(부대복리 포함) 연면적 30,000㎡ 이상 → 공급의무비율의 50% 이상을 지열 또는 수열로 설치"
-      ],
-      geoHydroRule: { thresholdArea: 30000, minShareOfObligation: 0.5, sources: ["지열", "수열"] }
+      zebExempt: { re: true, energy: false },
+      eiaRule: { green: "최우수", zeb: 5 },
+      geoHydroRule: { thresholdArea: 30000, minShareOfObligation: 0.5, sources: ["지열","수열"] },
+      notes: ["환경영향평가 대상: 녹색 최우수 + ZEB 5등급 이상",
+              "비주거 연면적 30,000㎡ 이상 → 의무비율의 50% 이상 지열·수열"]
     },
     "인천": {
-      revision: "2025.05 개정",
+      revision: "2025.05",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: null, re: 9.0 },
-        { tier: "나", households:  300, green: "우량", energy: null, re: 8.5 },
-        { tier: "다", households:   30, green: "일반", energy: null, re: 8.0 },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: null, re: 9.0 },
+        { tier: "나", hh:  300, green: "우량", energy: null, re: 8.5 },
+        { tier: "다", hh:   30, green: "일반", energy: null, re: 8.0 },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      zebExemptRE: true,
-      notes: ["대지면적 1% 태양광 의무설치", "EPI 일부 항목 최소배점 있음"]
+      zebExempt: { re: true, energy: false },
+      pvSiteRule: { siteAreaRatio: 0.01 },
+      notes: ["대지면적 1% 태양광 의무설치", "EPI 일부 항목 최소배점 주의"]
     },
     "경기": {
-      revision: "2017.09 시행(권장)",
+      revision: "2017.09",
       recommend: true,
       tiers: [
-        { tier: "가", households: 500, green: "우량", energy: "2", re: null, capacityRatio: 1.0 },
-        { tier: "나", households: 500, green: "우량", energy: "2", re: null, capacityRatio: 1.0 },
-        { tier: "다", households:   0, green: "일반", energy: "3", re: null, capacityRatio: 1.0 }
+        { tier: "나", hh: 500, green: "우량", energy: "2", re: null, capacityRatio: 1.0 },
+        { tier: "다", hh:   0, green: "일반", energy: "3", re: null, capacityRatio: null }
       ],
-      notes: ["전체설비용량 1% 기준", "경기도 환경영향평가 대상: 녹색 최우수 + ZEB 5등급 이상"]
+      zebExempt: { re: false, energy: false },
+      eiaRule: { green: "최우수", zeb: 5 },
+      notes: ["신재생은 비율이 아닌 '전체 설비용량 1%' 기준",
+              "권장사항이나 실무상 녹색 일반등급·에너지 1등급 이상으로 진행"]
     },
     "부산": {
-      revision: "2024.07 개정",
+      revision: "2024.07",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 10.0 },
-        { tier: "나", households:  300, green: "우량", energy: "1",  re: 10.0 },
-        { tier: "다", households:   30, green: "일반", energy: "2",  re: 8.0 },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 10.0 },
+        { tier: "나", hh:  300, green: "우량", energy: "1",  re: 10.0 },
+        { tier: "다", hh:   30, green: "일반", energy: "2",  re: 8.0 },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      zebExemptRE: true,
+      zebExempt: { re: true, energy: false },
       notes: ["2개 이상 신재생 복합설치 기준 삭제됨"]
     },
     "대전": {
-      revision: "2021.12 시행",
+      revision: "2021.12",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 9.0 },
-        { tier: "나", households:  500, green: "우량", energy: "1",  re: 8.0 },
-        { tier: "다", households:   30, green: "일반", energy: "2",  re: null },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
-      ]
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 9.0 },
+        { tier: "나", hh:  500, green: "우량", energy: "1",  re: 8.0 },
+        { tier: "다", hh:   30, green: "일반", energy: "2",  re: null },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
+      ],
+      zebExempt: { re: false, energy: false }, notes: []
     },
     "광주": {
-      revision: "2023.07 개정",
+      revision: "2023.07",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 8.0 },
-        { tier: "나", households:  300, green: "우량", energy: "1",  re: 7.0 },
-        { tier: "다", households:   30, green: "일반", energy: "2",  re: 5.0 },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
-      ]
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 8.0 },
+        { tier: "나", hh:  300, green: "우량", energy: "1",  re: 7.0 },
+        { tier: "다", hh:   30, green: "일반", energy: "2",  re: 5.0 },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
+      ],
+      zebExempt: { re: false, energy: false }, notes: []
     },
     "울산": {
-      revision: "2025.01 개정",
+      revision: "2025.01",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: null, re: null },
-        { tier: "나", households:  500, green: "우량", energy: null, re: null },
-        { tier: "다", households:   30, green: "일반", energy: null, re: null },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: null, re: null },
+        { tier: "나", hh:  500, green: "우량", energy: null, re: null },
+        { tier: "다", hh:   30, green: "일반", energy: null, re: null },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      notes: ["2025.01 이후 에너지효율등급 관련 내용 삭제", "신재생 관련 기준 없음", "EPI 최소배점 주의"]
+      zebExempt: { re: false, energy: false },
+      notes: ["2025.01 이후 에너지효율등급인증 내용 제외",
+              "신재생 관련 기준 없음", "EPI 일부 항목 최소배점 주의"]
     },
     "대구": {
-      revision: "2025.07 개정",
+      revision: "2025.07",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 10.0 },
-        { tier: "나", households:  300, green: "우량", energy: "1+", re: 10.0 },
-        { tier: "다", households:   30, green: "일반", energy: "1+", re: 7.0 },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 10.0 },
+        { tier: "나", hh:  300, green: "우량", energy: "1+", re: 10.0 },
+        { tier: "다", hh:   30, green: "일반", energy: "1+", re: 7.0 },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      notes: ["2개 이상 신재생에너지원 복합설치", "EPI 최소배점 주의"]
+      zebExempt: { re: false, energy: false },
+      multiSource: { required: true, min: 2 },
+      notes: ["2개 이상 신재생에너지원 복합설치 의무", "EPI 일부 항목 최소배점 주의"]
     },
     "경남": {
-      revision: "2025.03 개정",
-      verify: true,   // ⚠ 원문 표 OCR 혼선 구간 — 조례 원문 재확인 필요
+      revision: "2025.03",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 8.0 },
-        { tier: "나", households:  300, green: "우량", energy: "1",  re: 8.0 },
-        { tier: "다", households:   30, green: "일반", energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 8.0 },
+        { tier: "나", hh:  300, green: "우량", energy: "1",  re: 8.0 },
+        { tier: "다", hh:   30, green: "일반", energy: null, re: null }
       ],
-      notes: ["2개 이상 신재생 복합설치 권장", "30세대 이상 ZEB 5등급 이상 권장"]
+      zebExempt: { re: false, energy: false },
+      multiSource: { required: false, min: 2 },
+      notes: ["2개 이상 신재생 복합설치 권장(의무 아님)",
+              "30세대 이상 ZEB 5등급 이상 권장"]
     },
     "고양": {
-      revision: "2024.05 시행",
-      verify: true,
+      revision: "2024.05", parent: "경기",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 10.0 },
-        { tier: "나", households:  500, green: "우량", energy: "1",  re: 10.0 },
-        { tier: "다", households:   30, green: "일반", energy: "2",  re: 10.0 },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 2.5 },
+        { tier: "나", hh:  500, green: "우량", energy: "1",  re: 2.0 },
+        { tier: "다", hh:   30, green: "일반", energy: "2",  re: null },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      zebExemptRE: true,
-      notes: ["공공건축물은 20% 이상 일괄 적용"]
+      zebExempt: { re: true, energy: false },
+      publicOverride: { re: 20.0 },
+      verify: true,   // ⚠ 2.5%는 타 지자체 대비 이례적 → 산정기준(설비용량 여부) 확인
+      notes: ["공공건축물은 20% 이상 일괄 적용",
+              "신재생 2.5/2.0%는 타 지자체 대비 낮아 산정기준 원문 확인 필요",
+              "EPI 일부 항목 최소배점 주의"]
     },
     "충남": {
-      revision: "2024.06 개정",
-      verify: true,
+      revision: "2024.06",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: "1+", re: 9.0 },
-        { tier: "나", households:  300, green: "우량", energy: "1",  re: 8.0 },
-        { tier: "다", households:   30, green: "일반", energy: "2",  re: null },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: "1+", re: 10.0 },
+        { tier: "나", hh:  300, green: "우량", energy: "1",  re: 10.0 },
+        { tier: "다", hh:   30, green: "일반", energy: "2",  re: null },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      notes: ["EPI 최소배점 주의"]
+      zebExempt: { re: false, energy: false },
+      zebDeferred: { active: true, rule: [ { hh: 1000, grade: 4 }, { hh: 30, grade: 5 } ],
+                     note: "별도 고시 전까지 유예" },
+      notes: ["EPI 일부 항목 최소배점 주의", "ZEB 기준 있으나 별도 고시 전까지 유예"]
     },
     "제주": {
-      revision: "2025.07 개정",
-      verify: true,
+      revision: "2025.07",
       tiers: [
-        { tier: "A", households: 1000, green: "우수", energy: "1", re: 10.0 },
-        { tier: "B", households:  300, green: "우량", energy: "2", re: 9.5 },
-        { tier: "C", households:   30, green: "일반", energy: null, re: 9.0 },
-        { tier: "D", households:    0, green: null,   energy: null, re: null }
+        { tier: "A", hh: 1000, green: "우수", energy: "1",  re: 10.0 },
+        { tier: "B", hh:  300, green: "우량", energy: "2",  re: 9.0 },
+        { tier: "C", hh:   30, green: "일반", energy: null, re: 8.0 },
+        { tier: "D", hh:    0, green: null,   energy: null, re: null }
       ],
-      zebExemptRE: true,
-      notes: ["ZEB 기준 있으나 별도 고시 전까지 유예(30세대↑ 5등급, 1,000세대↑ 4등급)"]
+      zebExempt: { re: true, energy: true },   // 에너지효율등급까지 면제
+      notes: ["2025.07 권장 → 의무사항으로 개정됨",
+              "ZEB 취득 시 에너지·신재생 기준 모두 적용 제외 가능",
+              "EPI 일부 항목 최소배점 주의"]
     },
     "세종": {
-      revision: "2025.06 개정",
+      revision: "2025.06",
       tiers: [
-        { tier: "가", households: 1000, green: "우수", energy: null, re: "친환경주택 제7조 준수" },
-        { tier: "나", households:  300, green: "우량", energy: null, re: "친환경주택 제7조 준수" },
-        { tier: "다", households:   30, green: "일반", energy: null, re: null },
-        { tier: "라", households:    0, green: null,   energy: null, re: null }
+        { tier: "가", hh: 1000, green: "우수", energy: null, re: 10.0 },
+        { tier: "나", hh:  300, green: "우량", energy: null, re: 9.5 },
+        { tier: "다", hh:   30, green: "일반", energy: null, re: 9.0 },
+        { tier: "라", hh:    0, green: null,   energy: null, re: null }
       ],
-      zebExemptRE: true,
+      zebExempt: { re: true, energy: false },
       notes: ["2025.06 이후 에너지효율등급 관련 내용 제외"]
     },
     "그 외 지역": {
       tiers: [
-        { tier: "-", households: 500, green: "일반(의무)", energy: "1(권장)", re: null },
-        { tier: "-", households:   0, green: null,        energy: null,      re: null }
+        { tier: "-", hh: 500, green: "일반", greenMandatory: true,
+          energy: "1", energyRecommend: true, re: "GREEN_HOME_ART7" },
+        { tier: "-", hh:   0, green: null, energy: null, re: "GREEN_HOME_ART7" }
       ],
-      notes: ["의무취득 기준 없음. 500세대 이상은 주택성능등급 표시 대상"]
+      zebExempt: { re: false, energy: false },
+      notes: ["500세대 이상: 주택성능등급 의무 표시 대상 → 녹색건축인증 취득 필요",
+              "500세대 이하: 의무취득 기준 없음(건축주 요구 시 취득)",
+              "신재생은 「에너지절약형 친환경주택의 건설기준」 제7조 준수"]
     }
   },
-  /* ZEB 취득 시 공급의무비율 제외 가능한 지자체 */
-  zebExemptRegions: ["서울", "인천", "부산", "고양", "제주", "세종", "경남"]
+  zebExemptRegions: ["서울","인천","부산","고양","제주","세종"]
 };
+
 
 /* --------------------------------- 7. ZEB(제로에너지건축물) 인증 기준 */
 export const ZEB = {
