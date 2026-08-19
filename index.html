@@ -1,298 +1,159 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>신재생에너지 검토 툴</title>
 <style>
- body{font-family:-apple-system,"Malgun Gothic",sans-serif;margin:0;background:#f5f6f8;color:#222}
- header{background:#1f3a5f;color:#fff;padding:14px 24px}
- header b{font-size:18px} header span{opacity:.7;font-size:12px;margin-left:12px}
- .wrap{display:grid;grid-template-columns:400px 1fr;gap:16px;padding:16px;align-items:start}
- .card{background:#fff;border:1px solid #dde1e7;border-radius:8px;padding:14px;margin-bottom:14px}
- .card h3{margin:0 0 10px;font-size:14px;color:#1f3a5f;border-bottom:2px solid #1f3a5f;padding-bottom:6px}
- label{display:block;font-size:12px;color:#555;margin:8px 0 3px}
- input,select,textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #ccd2da;border-radius:4px;font-size:13px}
- .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
- button{background:#1f3a5f;color:#fff;border:0;padding:10px;border-radius:5px;cursor:pointer;font-size:14px;width:100%;margin-top:10px}
- button.sub{background:#5a6b80;font-size:12px;padding:7px}
- table{border-collapse:collapse;width:100%;font-size:12px;margin-top:6px}
- th,td{border:1px solid #dde1e7;padding:5px 7px;text-align:right}
- th{background:#eef1f5;text-align:center}
- td.l,th.l{text-align:left}
- .yes{color:#0a7d32;font-weight:700} .no{color:#999} .unk{color:#c47f00;font-weight:700}
- .warn{background:#fff6e5;border-left:4px solid #e0a300;padding:8px 12px;margin:6px 0;font-size:12px}
- .err{background:#ffecec;border-left:4px solid #d33;padding:8px 12px;margin:6px 0;font-size:12px}
- .bind{background:#ffe9e9;font-weight:700}
- .prov{font-size:11px;color:#888}
- .kpi{display:flex;gap:12px;flex-wrap:wrap}
- .kpi div{flex:1;min-width:130px;background:#eef4fb;border-radius:6px;padding:10px;text-align:center}
- .kpi b{display:block;font-size:20px;color:#1f3a5f}
- .kpi small{color:#666;font-size:11px}
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+         background:#f4f6f9; color:#1f2937; font-size:14px; }
+  header { background:#1e3a5f; color:#fff; padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; display:inline-block; }
+  header span { font-size:12px; opacity:.8; margin-left:10px; }
+  .wrap { display:grid; grid-template-columns:360px 1fr; gap:16px; padding:16px; align-items:start; }
+  .card { background:#fff; border-radius:8px; padding:16px; margin-bottom:14px;
+          box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size:14px; margin:0 0 12px; padding-bottom:8px;
+             border-bottom:2px solid #1e3a5f; color:#1e3a5f; }
+  label { display:block; font-size:12px; color:#4b5563; margin:8px 0 3px; }
+  input, select, textarea { width:100%; padding:7px 8px; border:1px solid #d1d5db;
+             border-radius:4px; font-size:13px; font-family:inherit; }
+  textarea { resize:vertical; min-height:64px; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .chk { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .chk input { width:auto; }
+  button { width:100%; padding:12px; background:#1e3a5f; color:#fff; border:none;
+           border-radius:5px; font-size:15px; font-weight:bold; cursor:pointer; }
+  button:hover { background:#2c5282; }
+  #report { min-height:200px; }
+  .alert { border-radius:6px; padding:12px 14px; margin-bottom:12px; font-size:13px; }
+  .alert.error { background:#fef2f2; border-left:4px solid #dc2626; color:#991b1b; }
+  .alert.warn  { background:#fffbeb; border-left:4px solid #d97706; color:#92400e; }
+  .alert.info  { background:#eff6ff; border-left:4px solid #2563eb; color:#1e40af; }
+  .alert.ok    { background:#f0fdf4; border-left:4px solid #16a34a; color:#166534; }
+  .alert b { display:block; margin-bottom:4px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin:8px 0 16px; }
+  th, td { border:1px solid #e5e7eb; padding:7px 9px; text-align:left; }
+  th { background:#f3f4f6; font-weight:600; width:200px; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  h3 { font-size:13px; color:#1e3a5f; margin:18px 0 6px; }
+  .muted { color:#6b7280; font-size:12px; }
 </style>
 </head>
 <body>
-<header><b>신재생에너지 검토 툴</b><span id="ver"></span></header>
+
+<header><h1>신재생에너지 검토 툴</h1><span id="ver"></span></header>
 
 <div class="wrap">
-<!-- ================= 입력 ================= -->
-<div>
-  <div class="card">
-    <h3>STEP 0. 기초정보</h3>
-    <label>프로젝트명</label><input id="pname" value="OO빌딩 리모델링">
-    <div class="row">
-      <div><label>인허가 신청 예정일</label><input type="date" id="pdate" value="2026-11-15"></div>
-      <div><label>설치계획서 접수일</label><input type="date" id="sdate"></div>
-    </div>
-    <label>발주처 유형</label>
-    <select id="ctype">
-      <option value="private">민간</option>
-      <option value="gov">국가기관</option>
-      <option value="local_gov">지방자치단체</option>
-      <option value="public_agency">공공기관</option>
-      <option value="gov_funded">정부출연기관</option>
-      <option value="gov_invested">정부출자기업체</option>
-      <option value="special_law">특별법 법인</option>
-    </select>
-    <label>행위 유형</label>
-    <select id="atype">
-      <option value="new">신축</option>
-      <option value="extension">별동 증축</option>
-      <option value="partial_extension">수직·수평 증축</option>
-      <option value="reconstruction">전부 개축/재축</option>
-      <option value="partial_reconstruction">일부 개축/재축</option>
-      <option value="full_renovation" selected>전면 대수선(리모델링)</option>
-      <option value="minor_alteration">일반 대수선</option>
-      <option value="use_change">용도변경</option>
-      <option value="relocation">이전</option>
-    </select>
-    <div class="row">
-      <div><label>시·도</label>
-<select id="sido">
-  <option>서울특별시</option><option>부산광역시</option><option>대구광역시</option>
-  <option>인천광역시</option><option>광주광역시</option><option>대전광역시</option>
-  <option>울산광역시</option><option>세종특별자치시</option><option>경기도</option>
-  <option>강원특별자치도</option><option>충청북도</option><option>충청남도</option>
-  <option>전북특별자치도</option><option>전라남도</option><option>경상북도</option>
-  <option>경상남도</option><option>제주특별자치도</option>
-</select>
+  <!-- ===== 입력 ===== -->
+  <form id="form" onsubmit="return false;">
 
-<label>시·군·구</label>
-<input id="sigungu" list="sigunguHint" placeholder="예: 강서구, 고양시">
-<datalist id="sigunguHint"><option>고양시</option></datalist>
+    <div class="card">
+      <h2>STEP 0. 기초정보</h2>
+      <label>프로젝트명</label>
+      <input id="pjtName" value="OO빌딩 리모델링">
+
+      <div class="row2">
+        <div>
+          <label>인허가 신청 예정일</label>
+          <input type="date" id="permitDate" value="2026-11-15">
+        </div>
+        <div>
+          <label>설치계획서 접수일</label>
+          <input type="date" id="planDate">
+        </div>
+      </div>
+
+      <label>발주자 유형</label>
+      <select id="clientType">
+        <option value="private">민간</option>
+        <option value="public">공공</option>
+      </select>
+
+      <label>행위 유형</label>
+      <select id="actType">
+        <option>신축</option><option>재축</option><option>개축</option>
+        <option>별동증축</option><option>수평증축</option>
+        <option selected>전면 대수선(리모델링)</option>
+      </select>
+
+      <div class="row2">
+        <div>
+          <label>시·도</label>
+          <select id="sido">
+            <option>서울특별시</option><option>부산광역시</option><option>대구광역시</option>
+            <option>인천광역시</option><option>광주광역시</option><option>대전광역시</option>
+            <option>울산광역시</option><option>세종특별자치시</option><option>경기도</option>
+            <option>강원특별자치도</option><option>충청북도</option><option>충청남도</option>
+            <option>전북특별자치도</option><option>전라남도</option><option>경상북도</option>
+            <option>경상남도</option><option>제주특별자치도</option>
+          </select>
+        </div>
+        <div>
+          <label>시·군·구</label>
+          <input id="sigungu" list="sigunguHint" value="강서구" placeholder="예: 강서구, 고양시">
+          <datalist id="sigunguHint">
+            <option>고양시</option><option>강릉시</option><option>동해시</option>
+            <option>삼척시</option><option>속초시</option><option>고성군</option>
+            <option>양양군</option>
+          </datalist>
+        </div>
+      </div>
+      <div class="muted" id="localHint" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>STEP 3. 규모·용도</h2>
+      <div class="row2">
+        <div><label>총 연면적(㎡)</label><input id="totalArea" value="11360.2"></div>
+        <div><label>주차장 면적(㎡)</label><input id="parkingArea" value="0"></div>
+      </div>
+      <label>세대수(주거)</label>
+      <input id="households" value="0">
+
+      <label>용도 구성 (용도,부문,면적 / 줄바꿈)</label>
+      <textarea id="useMix">방송통신시설,공공용,11360.2</textarea>
+      <div class="muted">부문 생략 가능. 틀리면 표1 기준으로 자동 보정됩니다.</div>
+
+      <div class="row2">
+        <div><label>연간 전력(kWh)</label><input id="annualElec" value="24500000"></div>
+        <div><label>연간 연료(toe)</label><input id="annualFuel" value="1850"></div>
+      </div>
+      <label>1차에너지소요량(kWh/㎡yr, ZEB용·선택)</label>
+      <input id="primaryEnergy" value="0">
+    </div>
+
+    <div class="card">
+      <h2>STEP 7. 부지 여건</h2>
+      <div class="row2">
+        <div><label>옥상 가용(㎡)</label><input id="roofArea" value="1450"></div>
+        <div><label>지하개발(㎡)</label><input id="basementArea" value="14000"></div>
+      </div>
+      <div class="row2">
+        <div><label>남측 입면(㎡)</label><input id="facadeS" value="2200"></div>
+        <div><label>동/서 입면(㎡)</label><input id="facadeEW" value="2200"></div>
+      </div>
+      <div class="chk"><input type="checkbox" id="geoOk"><label for="geoOk">지열 가능</label></div>
+      <div class="chk"><input type="checkbox" id="gasOk" checked><label for="gasOk">가스 인입 충분</label></div>
+      <div class="chk"><input type="checkbox" id="hydroOk"><label for="hydroOk">수열 수원 확보</label></div>
+      <div class="chk"><input type="checkbox" id="zebCert"><label for="zebCert">ZEB 인증 취득 예정</label></div>
+    </div>
+
+    <div class="card">
+      <h2>심의 반영값 (override)</h2>
+      <label>신재생 목표 비율(%) — 0이면 미적용</label>
+      <input id="ovRatio" value="0">
+      <label>사유</label>
+      <input id="ovReason" value="심의위원 의견">
+      <div style="margin-top:14px;"><button id="run">검토 실행</button></div>
+    </div>
+  </form>
+
+  <!-- ===== 결과 ===== -->
+  <div id="report" class="card"><span class="muted">좌측 입력 후 [검토 실행]을 눌러주세요.</span></div>
 </div>
-      <div><label>시·군·구</label><input id="sgg" value="강남구"></div>
-    </div>
-  </div>
 
-  <div class="card">
-    <h3>STEP 3. 규모·용도</h3>
-    <div class="row">
-      <div><label>총 연면적(㎡)</label><input type="number" id="gfa" value="52000"></div>
-      <div><label>주차장 면적(㎡)</label><input type="number" id="park" value="11000"></div>
-    </div>
-    <label>세대수(주거)</label><input type="number" id="hh" value="0">
-    <label>용도 구성 (용도,부문,면적 / 줄바꿈)</label>
-    <textarea id="uses" rows="3">업무시설,상업용,36000
-판매시설,상업용,5000</textarea>
-    <div class="row">
-      <div><label>연간 전력(kWh)</label><input type="number" id="ekwh" value="24500000"></div>
-      <div><label>연간 연료(toe)</label><input type="number" id="etoe" value="1850"></div>
-    </div>
-    <label>1차에너지소요량(kWh/yr, ZEB용·선택)</label><input type="number" id="eprim">
-  </div>
-
-  <div class="card">
-    <h3>STEP 7. 부지 여건</h3>
-    <div class="row">
-      <div><label>옥상 가용(㎡)</label><input type="number" id="roof" value="1450"></div>
-      <div><label>지하개발(㎡)</label><input type="number" id="under" value="14000"></div>
-    </div>
-    <div class="row">
-      <div><label>남측 입면(㎡)</label><input type="number" id="fs" value="2200"></div>
-      <div><label>동/서 입면(㎡)</label><input type="number" id="few" value="2200"></div>
-    </div>
-    <label><input type="checkbox" id="geo" checked style="width:auto"> 지열 가능</label>
-    <label><input type="checkbox" id="gas" checked style="width:auto"> 가스 인입 충분</label>
-    <label><input type="checkbox" id="wat" style="width:auto"> 수열 수원 확보</label>
-  </div>
-
-  <div class="card">
-    <h3>심의 반영값 (override)</h3>
-    <label>에너지사용계획 협의 목표(%)</label>
-    <input type="number" step="0.01" id="ovtoe" placeholder="미입력 시 0.40 적용">
-    <label>사유</label><input id="ovwhy" placeholder="예: 심의위원 의견">
-    <button onclick="run()">검토 실행</button>
-    <button class="sub" onclick="exportJSON()">JSON 내보내기</button>
-    <button class="sub" onclick="exportCSV()">Excel(CSV) 내보내기</button>
-    <button class="sub" onclick="copyNotion()">Notion 붙여넣기용 복사</button>
-  </div>
-</div>
-
-<!-- ================= 결과 ================= -->
-<div id="out"></div>
-</div>
-
-<script src="tables.js"></script>
-<script src="rules.js"></script>
-<script src="engine.js"></script>
-<script>
-document.getElementById("ver").textContent = "데이터 버전 " + DATA_VERSION;
-let LAST = null;
-
-function collect(){
-  const uses = document.getElementById("uses").value.trim().split("\n")
-    .filter(Boolean).map(l=>{ const [code,sector,gfa]=l.split(",").map(s=>s.trim());
-      return {code, sector, gfa:+gfa}; });
-  const ov = document.getElementById("ovtoe").value;
-  return {
-    project:{ name:document.getElementById("pname").value,
-              permit_expected_date:document.getElementById("pdate").value },
-    filing:{ plan_submission_date:document.getElementById("sdate").value||null },
-    client:{ type:document.getElementById("ctype").value },
-    action:{ primary:document.getElementById("atype").value },
-    location:{ sido:document.getElementById("sido").value,
-               sigungu:document.getElementById("sgg").value,
-               redevelopment_zone:false, project_area:0 },
-    buildings:[{ bldg_id:"A",
-      gfa_total:+document.getElementById("gfa").value,
-      gfa_parking:+document.getElementById("park").value,
-      households:+document.getElementById("hh").value, uses }],
-    energy_forecast:{ elec_kwh_y:+document.getElementById("ekwh").value,
-      fuel_toe_y:+document.getElementById("etoe").value,
-      primary_kwh_y:+document.getElementById("eprim").value||null },
-    site_capacity:{ roof_available_m2:+document.getElementById("roof").value,
-      facade_south_m2:+document.getElementById("fs").value,
-      facade_east_m2:+document.getElementById("few").value/2,
-      facade_west_m2:+document.getElementById("few").value/2,
-      underground_dev_area_m2:+document.getElementById("under").value,
-      geothermal_feasible:document.getElementById("geo").checked,
-      gas_capacity_ok:document.getElementById("gas").checked,
-      water_source:document.getElementById("wat").checked?"river":null },
-    overrides: ov ? { esp_review_target_pct:+ov,
-                      override_reason:document.getElementById("ovwhy").value } : {}
-  };
-}
-
-const n = v => v==null ? "-" : v.toLocaleString();
-
-function run(){
-  let R; try{ R = LAST = runReview(collect()); }
-  catch(e){ document.getElementById("out").innerHTML =
-    `<div class="card err"><b>계산 중단</b><br>${e.message}<br>
-     <span class="prov">규칙 DB에 없는 조합입니다. 임의 기본값을 쓰지 않고 중단했습니다. 수동 검토하세요.</span></div>`;
-    return; }
-
-  let h = "";
-
-  if(R.warnings.length) h += `<div class="card"><h3>검증 경고</h3>` +
-    R.warnings.map(w=>`<div class="${w.startsWith('✖')?'err':'warn'}">${w}</div>`).join("") + `</div>`;
-
-  const o = R.optimum;
-  h += `<div class="card"><h3>요약</h3><div class="kpi">
-    <div><b>${(R.demand.kwh/1000).toFixed(0)}</b><small>예상에너지사용량 (MWh/yr)</small></div>
-    <div><b>${R.demand.toe.toFixed(0)}</b><small>총에너지 (toe/yr)</small></div>
-    <div><b>${o.status==="optimal"?n(o.totalCost):"—"}</b><small>최소 공사비 (만원)</small></div>
-    <div><b>${R.schedule.startBy}</b><small>착수 마감일 (${R.schedule.maxLeadDays}일 소요)</small></div>
-    </div>
-    <p class="prov">기준일 ${R.meta.basisDate} · 데이터 ${R.meta.dataVersion} · 산출 ${R.meta.reviewedAt.slice(0,16).replace("T"," ")}</p></div>`;
-
-  h += `<div class="card"><h3>STEP 5. 적용 제도 매트릭스</h3><table>
-    <tr><th class="l">제도</th><th>적용</th><th>요구</th><th>산식</th>
-        <th class="l">판정근거</th><th>허가차단</th></tr>` +
-    R.regulations.map(r=>{
-      const st = r.error?`<span class="unk">오류</span>`
-               : r.unknown?`<span class="unk">확인필요</span>`
-               : r.apply?`<span class="yes">O</span>`:`<span class="no">-</span>`;
-      const rq = r.required
-        ? (r.required.pct!=null ? `${r.required.pct}%${r.required.grade?` [${r.required.grade}]`:""}` : "별도")
-        : "-";
-      return `<tr><td class="l"><b>${r.name}</b><br><span class="prov">${r.basis}</span></td>
-        <td>${st}</td><td>${rq}</td><td>${r.calc}</td>
-        <td class="l">${r.error||r.why}${r.required?.note?`<br><span class="prov">${r.required.note}</span>`:""}
-        ${r.required?.trace?`<br><span class="prov">${r.required.trace.join(" → ")}</span>`:""}
-        ${r.extra?`<br><span class="prov">＋ ${r.extra.name}: ${r.extra.rule}</span>`:""}</td>
-        <td>${r.apply&&r.blocksPermit?"●":""}</td></tr>`;
-    }).join("") + `</table></div>`;
-
-  h += `<div class="card"><h3>수요량 산정 내역</h3><table>
-    <tr><th class="l">동</th><th class="l">용도</th><th>총면적</th><th>주차차감후</th>
-        <th>단위에너지</th><th>지역계수</th><th>에너지(kWh/yr)</th></tr>` +
-    R.demand.lines.map(l=>`<tr><td class="l">${l.bldg}</td><td class="l">${l.use}<br>
-      <span class="prov">${l.prov}</span></td><td>${n(l.gross)}</td><td>${n(l.net)}</td>
-      <td>${l.unitEnergy}</td><td>${l.region}</td><td>${n(l.energy)}</td></tr>`).join("") +
-    `<tr><th colspan="6" class="l">합계</th><th>${n(Math.round(R.demand.kwh))}</th></tr></table>
-     <p class="prov">${R.demand.note} · 용도별 보정계수는 2017.4.1. 폐지되어 미적용</p></div>`;
-
-  if(o.status==="optimal"){
-    h += `<div class="card"><h3>STEP 7. 최적 설비 조합 (최소비용)</h3><table>
-      <tr><th class="l">설비</th><th>용량</th><th>단위</th><th>소요면적(㎡)</th>
-          <th>보정생산량</th><th>실생산량</th><th>공사비(만원)</th></tr>` +
-      o.mix.map(m=>`<tr><td class="l">${m.name}<br><span class="prov">${m.prov}</span></td>
-        <td>${n(m.capacity)}</td><td>${m.unit}</td><td>${n(m.area)}</td>
-        <td>${n(m.genCorrected)}</td><td>${n(m.genRaw)}</td><td>${n(m.cost)}</td></tr>`).join("") +
-      `<tr><th colspan="6" class="l">합계</th><th>${n(o.totalCost)}</th></tr></table>
-      <p class="prov">여유율 ${SAFETY_AREA} 반영</p></div>`;
-
-    h += `<div class="card"><h3>제약조건 · 민감도</h3><table>
-      <tr><th class="l">제약조건</th><th>RHS +5% 시 비용증가(만원)</th></tr>` +
-      o.sensitivity.map(s=>`<tr class="${s.deltaCost>1?'bind':''}">
-        <td class="l">${s.constraint}</td>
-        <td>${s.deltaCost==null?s.status:n(s.deltaCost)}</td></tr>`).join("") +
-      `</table><p class="prov">붉은 행 = 지배적 제약(binding). 이 조건이 설계·공사비를 결정합니다.</p></div>`;
-  } else {
-    h += `<div class="card err"><b>해 없음 (${o.status})</b><br>
-      제약: ${(o.constraints||[]).join(" / ")}<br>${o.hint||""}</div>`;
-  }
-
-  if(R.toeSweep) h += `<div class="card"><h3>toe 목표치 민감도 (심의 협의 근거)</h3><table>
-    <tr><th class="l">목표(%)</th>` + R.toeSweep.map(s=>`<th>${s.target}</th>`).join("") + `</tr>
-    <tr><td class="l">공사비(만원)</td>` +
-    R.toeSweep.map(s=>`<td>${s.cost==null?s.status:n(s.cost)}</td>`).join("") +
-    `</tr></table><p class="prov">0.40→0.45% 상향 시 공사비 증가분을 협의 자료로 제시하십시오.</p></div>`;
-
-  h += `<div class="card"><h3>대안 시나리오</h3><table>
-    <tr><th class="l">시나리오</th><th>공사비(만원)</th><th class="l">구성</th></tr>` +
-    R.alternatives.map(a=>`<tr><td class="l">${a.name}</td>
-      <td>${a.status==="optimal"?n(a.totalCost):a.status}</td>
-      <td class="l">${a.status==="optimal"
-        ? a.mix.map(m=>`${m.name} ${m.capacity}${m.unit}`).join(", ") : "-"}</td></tr>`).join("") +
-    `</table></div>`;
-
-  document.getElementById("out").innerHTML = h;
-}
-
-function dl(name, text, type){
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob(["\ufeff"+text],{type}));
-  a.download=name; a.click();
-}
-function exportJSON(){ if(LAST) dl("review.json", JSON.stringify(LAST,null,2), "application/json"); }
-function exportCSV(){
-  if(!LAST) return;
-  let c="제도,적용,요구비율,산식,판정근거\n";
-  LAST.regulations.forEach(r=>c+=`"${r.name}",${r.apply?"O":"-"},`+
-    `${r.required?.pct??""},"${r.calc}","${(r.error||r.why).replace(/"/g,"'")}"\n`);
-  c+="\n설비,용량,단위,면적,공사비(만원)\n";
-  (LAST.optimum.mix||[]).forEach(m=>c+=`"${m.name}",${m.capacity},${m.unit},${m.area},${m.cost}\n`);
-  dl("review.csv", c, "text/csv;charset=utf-8");
-}
-function copyNotion(){
-  if(!LAST) return;
-  const o=LAST.optimum;
-  const t = [
-    `## 신재생에너지 검토 결과`,
-    `- 기준일: ${LAST.meta.basisDate} / 데이터버전: ${LAST.meta.dataVersion}`,
-    `- 예상에너지사용량: ${Math.round(LAST.demand.kwh).toLocaleString()} kWh/yr`,
-    `- 적용제도: ${LAST.regulations.filter(r=>r.apply).map(r=>`${r.name}(${r.required?.pct??"-"}%)`).join(", ")}`,
-    `- 지배제약: ${(o.binding||[]).join(" / ")||"-"}`,
-    `- 설비: ${(o.mix||[]).map(m=>`${m.name} ${m.capacity}${m.unit}`).join(", ")}`,
-    `- 공사비: ${o.totalCost?.toLocaleString()} 만원`,
-    `- 착수마감: ${LAST.schedule.startBy}`,
-    LAST.warnings.length?`- ⚠ ${LAST.warnings.join(" / ")}`:""
-  ].join("\n");
-  navigator.clipboard.writeText(t).then(()=>alert("Notion에 붙여넣기 하세요."));
-}
-run();
-</script>
+<script type="module" src="./engine.js?v=20260819"></script>
 </body>
 </html>
