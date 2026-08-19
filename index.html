@@ -67,8 +67,19 @@
     </select>
     <div class="row">
       <div><label>시·도</label>
-        <select id="sido"><option>서울특별시</option><option>경기도</option>
-        <option>인천광역시</option><option>부산광역시</option><option>대전광역시</option></select></div>
+<select id="sido">
+  <option>서울특별시</option><option>부산광역시</option><option>대구광역시</option>
+  <option>인천광역시</option><option>광주광역시</option><option>대전광역시</option>
+  <option>울산광역시</option><option>세종특별자치시</option><option>경기도</option>
+  <option>강원특별자치도</option><option>충청북도</option><option>충청남도</option>
+  <option>전북특별자치도</option><option>전라남도</option><option>경상북도</option>
+  <option>경상남도</option><option>제주특별자치도</option>
+</select>
+
+<label>시·군·구</label>
+<input id="sigungu" list="sigunguHint" placeholder="예: 강서구, 고양시">
+<datalist id="sigunguHint"><option>고양시</option></datalist>
+</div>
       <div><label>시·군·구</label><input id="sgg" value="강남구"></div>
     </div>
   </div>
