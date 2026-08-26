@@ -4,6 +4,7 @@
 import * as T from "./tables.js?v=20260819";
 import { CERTIFICATIONS, CERT_SOURCE } from "./certifications.js?v=20260826";
 import { evaluateCert } from "./certRules.js?v=20260826";
+import { parseOverviewText } from "./autofill.js?v=20260826";
 
 const $  = (id) => document.getElementById(id);
 const num = (id) => {
@@ -15,6 +16,100 @@ const fmt = (n, d = 0) =>
     { minimumFractionDigits: d, maximumFractionDigits: d });
 
 $("ver").textContent = `데이터 버전 ${T.DATA_VERSION} · ${T.SOURCE_VERSION}`;
+
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ---------- 설계개요 자동입력 ---------- */
+let lastOverviewParse = null;
+const CONF_LABEL = { high: "높음", mid: "중간", low: "낮음" };
+const CONF_COLOR = { high: "#16a34a", mid: "#d97706", low: "#dc2626" };
+
+function renderOverviewPreview(result) {
+  const wrap = $("overviewPreview");
+  if (!result.fields.length) {
+    wrap.innerHTML = `<div class="alert warn"><b>인식된 항목이 없습니다</b>${result.warnings.map(w => escHtml(w)).join("<br>")}</div>`;
+    $("applyOverview").disabled = true;
+    return;
+  }
+  const rowsHtml = result.fields.map((f, i) => `
+    <tr data-idx="${i}">
+      <td style="width:26px;text-align:center;"><input type="checkbox" class="ov-chk" checked></td>
+      <td>${escHtml(f.label)}
+        <span style="color:${CONF_COLOR[f.confidence] || "#6b7280"};font-size:11px;">● 인식신뢰도 ${CONF_LABEL[f.confidence] || "-"}</span>
+        <div class="muted" style="font-size:11px;">원문: "${escHtml(f.raw)}"${f.note ? ` · ${escHtml(f.note)}` : ""}</div>
+      </td>
+      <td><input class="ov-val" value="${escHtml(f.value)}" style="padding:4px 6px;"></td>
+    </tr>`).join("");
+
+  const infoHtml = result.infoOnly.length ? `
+    <div class="muted" style="margin-top:10px;"><b>참고용 (해당 입력필드 없어 자동입력 안 됨)</b><br>${
+      result.infoOnly.map(x => `· ${escHtml(x.label)}: ${escHtml(x.value)} <span style="opacity:.75">(${escHtml(x.note)})</span>`).join("<br>")
+    }</div>` : "";
+
+  const floorHtml = result.floorTable.length ? `
+    <div class="muted" style="margin-top:6px;">층별 면적표 ${result.floorTable.length}행 인식됨 (지상연면적/지하연면적 자동합산에 참고, 개별 반영은 안 됨)</div>` : "";
+
+  const warnHtml = result.warnings.length ? `
+    <div class="alert info" style="margin-top:8px;">${result.warnings.map(w => `· ${escHtml(w)}`).join("<br>")}</div>` : "";
+
+  wrap.innerHTML = `
+    <table style="margin:6px 0;">
+      <tr><th style="width:26px"></th><th style="width:auto">항목</th><th style="width:160px">적용값 (수정 가능)</th></tr>
+      ${rowsHtml}
+    </table>
+    ${infoHtml}${floorHtml}${warnHtml}`;
+  $("applyOverview").disabled = false;
+}
+
+$("parseOverview").addEventListener("click", () => {
+  const text = $("overviewText").value;
+  lastOverviewParse = parseOverviewText(text);
+  renderOverviewPreview(lastOverviewParse);
+});
+
+function setFieldValue(target, value) {
+  const el = document.querySelector(target);
+  if (!el) return false;
+  el.value = value;
+  return true;
+}
+
+$("applyOverview").addEventListener("click", () => {
+  if (!lastOverviewParse) return;
+  const rows = document.querySelectorAll("#overviewPreview tr[data-idx]");
+  const applied = [];
+  let useVal = null, totalAreaVal = null;
+
+  rows.forEach(tr => {
+    const idx = parseInt(tr.dataset.idx, 10);
+    const f = lastOverviewParse.fields[idx];
+    const chk = tr.querySelector(".ov-chk").checked;
+    const val = tr.querySelector(".ov-val").value;
+    if (!chk || !f) return;
+
+    if (f.key === "useMixGuess") { useVal = val; return; }
+    setFieldValue(f.target, val);
+    applied.push(f.label);
+    if (f.key === "totalArea") totalAreaVal = val;
+  });
+
+  if (useVal) {
+    const area = totalAreaVal || $("totalArea").value;
+    if (area) {
+      $("useMix").value = `${useVal},${area}`;
+      applied.push("용도 구성");
+    } else {
+      applied.push("(용도명은 인식했으나 면적 정보가 없어 용도 구성에는 반영하지 못했습니다 — 직접 입력하세요)");
+    }
+  }
+
+  updateHint();
+  const wrap = $("overviewPreview");
+  wrap.insertAdjacentHTML("beforeend",
+    `<div class="alert ok" style="margin-top:8px;"><b>${applied.length}개 항목 적용 완료</b>
+     ${applied.map(a => escHtml(a)).join(" · ")}. 좌측 입력값을 확인 후 [검토 실행]을 눌러주세요.</div>`);
+});
 
 /* ---------- 시·도 변경 시 적용 지자체 기준 미리보기 ---------- */
 function updateHint() {

@@ -51,6 +51,25 @@
   <form id="form" onsubmit="return false;">
 
     <div class="card">
+      <h2>설계개요 붙여넣기로 자동입력</h2>
+      <label>도면 "설계개요" 표를 복사해 붙여넣으세요 (텍스트 선택 후 Ctrl+C/V)</label>
+      <textarea id="overviewText" placeholder="예)
+대지위치  서울특별시 영등포구 영등포동2가 94-143번지
+대지면적  1,382.00㎡
+층 수    지하4층 ~ 지상10층
+지상연면적 6,850.98㎡
+지하연면적 2,996.47㎡
+용도     방송통신시설 중 데이터센터
+..." style="min-height:90px;"></textarea>
+      <div class="row2" style="margin-top:8px;">
+        <button type="button" id="parseOverview" style="background:#2c5282;">① 인식하기</button>
+        <button type="button" id="applyOverview" style="background:#16a34a;" disabled>② 폼에 적용</button>
+      </div>
+      <div class="muted" style="margin-top:6px;">이미지(스캔/캡처)만 있다면 표 내용을 손으로 옮겨 적어 붙여넣어도 됩니다. 인식 결과는 적용 전 미리보기에서 확인·수정할 수 있습니다.</div>
+      <div id="overviewPreview" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
       <h2>STEP 0. 기초정보</h2>
       <label>프로젝트명</label>
       <input id="pjtName" value="OO빌딩 리모델링">
@@ -182,6 +201,6 @@
   <div id="report" class="card"><span class="muted">좌측 입력 후 [검토 실행]을 눌러주세요.</span></div>
 </div>
 
-<script type="module" src="./engine.js?v=20260826"></script>
+<script type="module" src="./engine.js?v=20260826b"></script>
 </body>
 </html>
