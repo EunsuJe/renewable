@@ -2,6 +2,8 @@
  * engine.js — 입력 파싱 · 계산 · 리포트 렌더링
  * ========================================================================= */
 import * as T from "./tables.js?v=20260819";
+import { CERTIFICATIONS, CERT_SOURCE } from "./certifications.js?v=20260826";
+import { evaluateCert } from "./certRules.js?v=20260826";
 
 const $  = (id) => document.getElementById(id);
 const num = (id) => {
@@ -231,6 +233,66 @@ function run() {
           `IT부하 등 특수부하가 있는 시설은 표준 원단위가 실제를 반영하지 못합니다. ` +
           `의무비율 판정은 표준 원단위, 협의 대상 판정은 실사용 예측치로 분리 표기하세요.`);
     }
+
+    /* 10. 인허가·인증 항목 체크리스트 (Notion DB 연동) */
+    const certCtx = {
+      clientType, actType, sido, sigungu,
+      totalArea, parkingArea, households, rows,
+      housingType: $("housingType").value,
+      siteArea: num("siteArea"),
+      floorsAbove: num("floorsAbove"),
+      dormitory: $("dormitory").checked,
+      militaryExclude: $("militaryExclude").checked,
+      cptedResiTypes: households > 0,
+      cptedNeighborhood: $("cptedNeighborhood").checked,
+      cptedLodging: $("cptedLodging").checked,
+      parkingStandalone: $("parkingStandalone").checked,
+      ultraHighRise: $("ultraHighRise").checked,
+      transportFacility: $("transportFacility").checked,
+      redevelopmentZone: $("redevelopmentZone").checked,
+      nearEduFacility: $("nearEduFacility").checked,
+      watershedTarget: $("watershedTarget").checked,
+      zebGrade4Uses: T.ZEB.grade4Uses
+    };
+
+    const STATUS_LABEL = {
+      apply: { badge: "대상", cls: "ok" },
+      not_apply: { badge: "비대상", cls: "muted-badge" },
+      check: { badge: "확인필요", cls: "warn" }
+    };
+
+    const certRows = CERTIFICATIONS.map(c => {
+      const r = evaluateCert(c.id, certCtx);
+      return { c, r };
+    });
+
+    const order = { apply: 0, check: 1, not_apply: 2 };
+    certRows.sort((a, b) => order[a.r.status] - order[b.r.status] || a.c.order - b.c.order);
+
+    const applyCount = certRows.filter(x => x.r.status === "apply").length;
+    const checkCount = certRows.filter(x => x.r.status === "check").length;
+
+    out.push(`<h3>5. 인허가·인증 체크리스트 (${CERT_SOURCE.name} 연동)</h3>
+      <div class="muted" style="margin-bottom:8px;">대상 ${applyCount}건 · 확인필요 ${checkCount}건 / 전체 ${CERTIFICATIONS.length}건 ·
+      출처: <a href="${CERT_SOURCE.url}" target="_blank" rel="noopener">${CERT_SOURCE.url}</a> (최종 동기화 ${CERT_SOURCE.lastSynced})</div>
+      <table>
+        <tr><th style="width:auto">항목</th><th style="width:70px">판정</th><th style="width:auto">근거법령</th>
+            <th style="width:auto">제출시기</th><th style="width:auto">판정사유</th></tr>
+        ${certRows.map(({ c, r }) => {
+          const cls = STATUS_LABEL[r.status].cls;
+          const style = cls === "muted-badge"
+            ? "background:#f3f4f6;color:#6b7280;border-left:4px solid #9ca3af;"
+            : "";
+          const badge = `<span class="alert ${cls === 'muted-badge' ? '' : cls}" style="display:inline-block;padding:2px 8px;margin:0;white-space:nowrap;${style}">${STATUS_LABEL[r.status].badge}</span>`;
+          return `<tr>
+            <td><b>${c.name}</b></td>
+            <td>${badge}</td>
+            <td class="muted">${c.basis.join("<br>")}</td>
+            <td class="muted">${c.timing.join("<br>")}</td>
+            <td class="muted">${r.reasons.map(x => `· ${x}`).join("<br>")}</td>
+          </tr>`;
+        }).join("")}
+      </table>`);
 
   } catch (e) {
     out.unshift(`<div class="alert error"><b>계산 중단</b>${e.message}

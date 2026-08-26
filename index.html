@@ -34,8 +34,9 @@
   .alert.ok    { background:#f0fdf4; border-left:4px solid #16a34a; color:#166534; }
   .alert b { display:block; margin-bottom:4px; }
   table { width:100%; border-collapse:collapse; font-size:13px; margin:8px 0 16px; }
-  th, td { border:1px solid #e5e7eb; padding:7px 9px; text-align:left; }
+  th, td { border:1px solid #e5e7eb; padding:7px 9px; text-align:left; vertical-align:top; }
   th { background:#f3f4f6; font-weight:600; width:200px; }
+  h3 table th:not(:first-child) { width:auto; }
   td.num { text-align:right; font-variant-numeric:tabular-nums; }
   h3 { font-size:13px; color:#1e3a5f; margin:18px 0 6px; }
   .muted { color:#6b7280; font-size:12px; }
@@ -141,6 +142,33 @@
     </div>
 
     <div class="card">
+      <h2>STEP 3. 인증 판정 추가정보</h2>
+      <label>주택 유형 (공동주택 계열인 경우 선택)</label>
+      <select id="housingType">
+        <option value="비주거/기타" selected>비주거/기타 (해당없음)</option>
+        <option value="공동주택(사업계획승인)">공동주택(사업계획승인 대상, 30세대~)</option>
+        <option value="도시형생활주택">도시형생활주택(50세대~)</option>
+        <option value="주상복합아파트">주상복합아파트(300세대~)</option>
+      </select>
+
+      <div class="row2">
+        <div><label>사업부지 면적(㎡)</label><input id="siteArea" value="0"></div>
+        <div><label>지상 층수</label><input id="floorsAbove" value="0"></div>
+      </div>
+
+      <div class="chk"><input type="checkbox" id="dormitory"><label for="dormitory">기숙사 (ZEB 의무 제외)</label></div>
+      <div class="chk"><input type="checkbox" id="militaryExclude"><label for="militaryExclude">군부대주둔지 내 국방·군사시설 (G-SEED 제외)</label></div>
+      <div class="chk"><input type="checkbox" id="cptedNeighborhood"><label for="cptedNeighborhood">근린생활시설(일용품 소매점·다중생활시설) 해당</label></div>
+      <div class="chk"><input type="checkbox" id="cptedLodging"><label for="cptedLodging">숙박시설 중 다중생활시설 해당</label></div>
+      <div class="chk"><input type="checkbox" id="parkingStandalone"><label for="parkingStandalone">독립 주차장(노상·노외) 사업임</label></div>
+      <div class="chk"><input type="checkbox" id="ultraHighRise"><label for="ultraHighRise">초고층/준초고층·지하연계 복합건축물</label></div>
+      <div class="chk"><input type="checkbox" id="transportFacility"><label for="transportFacility">교통시설(터미널·철도·공항·항만 등)</label></div>
+      <div class="chk"><input type="checkbox" id="redevelopmentZone"><label for="redevelopmentZone">도시정비법 정비구역/농어촌정비사업 해당</label></div>
+      <div class="chk"><input type="checkbox" id="nearEduFacility"><label for="nearEduFacility">정비구역 경계 200m 이내 교육시설 존재</label></div>
+      <div class="chk"><input type="checkbox" id="watershedTarget"><label for="watershedTarget">특정유역 하수배출/환경영향평가 대상사업</label></div>
+    </div>
+
+    <div class="card">
       <h2>심의 반영값 (override)</h2>
       <label>신재생 목표 비율(%) — 0이면 미적용</label>
       <input id="ovRatio" value="0">
@@ -154,6 +182,6 @@
   <div id="report" class="card"><span class="muted">좌측 입력 후 [검토 실행]을 눌러주세요.</span></div>
 </div>
 
-<script type="module" src="./engine.js?v=20260819"></script>
+<script type="module" src="./engine.js?v=20260826"></script>
 </body>
 </html>
