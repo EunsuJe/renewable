@@ -68,6 +68,104 @@ $("parseOverview").addEventListener("click", () => {
   renderOverviewPreview(lastOverviewParse);
 });
 
+/* ---------- 이미지/PDF 업로드 → 텍스트 추출(OCR/PDF텍스트) ---------- */
+if (window.pdfjsLib) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+function setOcrStatus(msg, isError) {
+  const el = $("ocrStatus");
+  el.textContent = msg;
+  el.style.color = isError ? "#dc2626" : "#6b7280";
+}
+
+async function ocrImageSource(imgSource, onProgress) {
+  // imgSource: File, Blob, canvas, or dataURL — Tesseract.js가 모두 지원
+  const { data } = await Tesseract.recognize(imgSource, "kor+eng", {
+    logger: (m) => {
+      if (m.status && typeof m.progress === "number") {
+        onProgress?.(`${m.status} ${(m.progress * 100).toFixed(0)}%`);
+      }
+    }
+  });
+  return data.text || "";
+}
+
+/** PDF 파일 → 텍스트. 텍스트 레이어가 충분하면 그것을 쓰고,
+ *  거의 없으면(스캔 PDF로 판단) 각 페이지를 캔버스로 렌더링해 OCR한다. */
+async function extractTextFromPdf(file, onProgress) {
+  if (!window.pdfjsLib) throw new Error("PDF 라이브러리를 불러오지 못했습니다. 네트워크 연결을 확인하세요.");
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+
+  let textLayer = "";
+  const maxPages = Math.min(pdf.numPages, 10);
+  for (let p = 1; p <= maxPages; p++) {
+    onProgress?.(`PDF 텍스트 레이어 확인 중 (${p}/${maxPages}페이지)`);
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    textLayer += content.items.map((it) => it.str).join(" ") + "\n";
+  }
+
+  if (textLayer.replace(/\s/g, "").length >= 30) {
+    return { text: textLayer, mode: "pdf-text" };
+  }
+
+  // 텍스트 레이어가 거의 없음 → 스캔 PDF로 간주, 페이지를 이미지로 렌더링 후 OCR
+  onProgress?.("텍스트 레이어가 부족하여 이미지로 변환 후 OCR을 진행합니다...");
+  let ocrText = "";
+  for (let p = 1; p <= maxPages; p++) {
+    const page = await pdf.getPage(p);
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    onProgress?.(`OCR 진행 중 (${p}/${maxPages}페이지)`);
+    ocrText += await ocrImageSource(canvas, (s) => onProgress?.(`OCR 진행 중 (${p}/${maxPages}페이지) — ${s}`));
+    ocrText += "\n";
+  }
+  return { text: ocrText, mode: "pdf-ocr" };
+}
+
+$("overviewFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const btn = $("parseOverview");
+  btn.disabled = true;
+  try {
+    let extracted = "";
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      setOcrStatus("PDF 분석 중...");
+      const { text, mode } = await extractTextFromPdf(file, (s) => setOcrStatus(s));
+      extracted = text;
+      setOcrStatus(`완료 (${mode === "pdf-text" ? "PDF 텍스트 레이어 사용" : "스캔 PDF → OCR 사용"}). 아래 텍스트를 확인 후 [③ 인식하기]를 눌러주세요.`);
+    } else if (file.type.startsWith("image/")) {
+      setOcrStatus("이미지 OCR 진행 중... (수 초~수십 초 소요될 수 있습니다)");
+      extracted = await ocrImageSource(file, (s) => setOcrStatus(`이미지 OCR 진행 중... ${s}`));
+      setOcrStatus("완료. 아래 텍스트를 확인 후 [③ 인식하기]를 눌러주세요.");
+    } else {
+      setOcrStatus("지원하지 않는 파일 형식입니다. 이미지(PNG/JPG) 또는 PDF를 선택하세요.", true);
+      return;
+    }
+
+    if (!extracted.trim()) {
+      setOcrStatus("텍스트를 인식하지 못했습니다. 더 선명한 이미지/PDF로 다시 시도하거나 직접 붙여넣으세요.", true);
+      return;
+    }
+    $("overviewText").value = extracted.trim();
+    // 자동으로 파싱까지 실행
+    lastOverviewParse = parseOverviewText(extracted);
+    renderOverviewPreview(lastOverviewParse);
+  } catch (err) {
+    setOcrStatus(`인식 실패: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function setFieldValue(target, value) {
   const el = document.querySelector(target);
   if (!el) return false;

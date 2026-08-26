@@ -51,8 +51,12 @@
   <form id="form" onsubmit="return false;">
 
     <div class="card">
-      <h2>설계개요 붙여넣기로 자동입력</h2>
-      <label>도면 "설계개요" 표를 복사해 붙여넣으세요 (텍스트 선택 후 Ctrl+C/V)</label>
+      <h2>설계개요 자동입력</h2>
+      <label>① 이미지 또는 PDF 파일 업로드 (도면의 "설계개요" 캡처/스캔본)</label>
+      <input type="file" id="overviewFile" accept="image/*,application/pdf">
+      <div class="muted" id="ocrStatus" style="margin-top:6px;">이미지는 OCR로, PDF는 텍스트 레이어(없으면 OCR)로 자동 인식합니다. 파일이 클수록 시간이 걸릴 수 있습니다.</div>
+
+      <label style="margin-top:14px;">② 또는 텍스트를 직접 붙여넣기 (위에서 인식된 텍스트도 여기 채워지며, 수정 가능)</label>
       <textarea id="overviewText" placeholder="예)
 대지위치  서울특별시 영등포구 영등포동2가 94-143번지
 대지면적  1,382.00㎡
@@ -62,10 +66,10 @@
 용도     방송통신시설 중 데이터센터
 ..." style="min-height:90px;"></textarea>
       <div class="row2" style="margin-top:8px;">
-        <button type="button" id="parseOverview" style="background:#2c5282;">① 인식하기</button>
-        <button type="button" id="applyOverview" style="background:#16a34a;" disabled>② 폼에 적용</button>
+        <button type="button" id="parseOverview" style="background:#2c5282;">③ 인식하기</button>
+        <button type="button" id="applyOverview" style="background:#16a34a;" disabled>④ 폼에 적용</button>
       </div>
-      <div class="muted" style="margin-top:6px;">이미지(스캔/캡처)만 있다면 표 내용을 손으로 옮겨 적어 붙여넣어도 됩니다. 인식 결과는 적용 전 미리보기에서 확인·수정할 수 있습니다.</div>
+      <div class="muted" style="margin-top:6px;">인식 결과는 적용 전 미리보기에서 확인·수정할 수 있습니다.</div>
       <div id="overviewPreview" style="margin-top:10px;"></div>
     </div>
 
@@ -201,6 +205,9 @@
   <div id="report" class="card"><span class="muted">좌측 입력 후 [검토 실행]을 눌러주세요.</span></div>
 </div>
 
-<script type="module" src="./engine.js?v=20260826b"></script>
+<!-- 이미지/PDF 인식용 라이브러리 (CDN) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script type="module" src="./engine.js?v=20260826c"></script>
 </body>
 </html>
