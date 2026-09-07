@@ -551,6 +551,86 @@ export const INSULATION_K = {
          "Ⅱ-A":0.022,"Ⅱ-B":0.037,"Ⅲ-A":0.039 }
 };
 
+/* --------------------- 12-1. 발주주체·인허가트랙·사업유형 추정용 사전
+ * STEP2 "OCR 추정 → 사용자 확정" 필드의 프리필 로직에서 사용.
+ * 오판 시 3개 제도(신재생·ZEB·BF)가 동시에 틀어지므로 반드시 사용자 확인을 강제한다. */
+export const OWNER_TYPE_GUESS = {
+  // 판정 순서가 중요 (구체적인 것부터)
+  patterns: [
+    { re: /(LH|한국토지주택공사|SH|서울주택도시공사|GH|경기주택도시공사|주택도시보증공사|지방공사|도시공사)/i,
+      type: "공공주택사업자", label: "공공주택사업자(LH·SH·GH 등)" },
+    { re: /교육청|교육지원청/, type: "교육감", label: "교육감" },
+    { re: /(특별시장|광역시장|도지사|시장|군수|구청장|^서울|^부산|^인천|^대구|^광주|^대전|^울산|^세종|.{1,6}(시|군|구)(청|장)?$)/,
+      type: "지방자치단체", label: "지방자치단체" },
+    { re: /(공사$|공단$|진흥원|한국.*(공사|공단)|국가철도공단|한국전력|한국수자원공사|한국환경공단)/,
+      type: "공공기관", label: "공공기관(공사·공단 등)" },
+    { re: /(정부|부$|처$|중앙행정기관|국방부|조달청)/, type: "중앙행정기관", label: "중앙행정기관" }
+  ],
+  fallback: { type: "민간", label: "민간(추정 실패 — 반드시 확인)" }
+};
+
+/** 건축주·시행자 명칭 문자열로 발주주체 구분을 추정한다.
+ *  ⚠ 정부출연기관(연 50억 이상)·지방공기업은 상호명만으로 판별 불가 —
+ *     반드시 화면에서 사용자 확정을 받을 것 (자동 확정 금지). */
+export function guessOwnerType(ownerName) {
+  const name = String(ownerName ?? "").trim();
+  if (!name) return { type: null, label: "(입력 없음 — 직접 선택 필요)", matched: null };
+  for (const p of OWNER_TYPE_GUESS.patterns) {
+    if (p.re.test(name)) return { type: p.type, label: p.label, matched: name };
+  }
+  return { ...OWNER_TYPE_GUESS.fallback, matched: name };
+}
+
+export const PUBLIC_OWNER_TYPES = ["지방자치단체", "공공주택사업자", "교육감", "공공기관", "중앙행정기관"];
+export const isPublicOwnerType = (ownerType) => PUBLIC_OWNER_TYPES.includes(ownerType);
+
+/** permit_hint 문구(사업계획승인/건축허가)와 세대수·주택 여부로 인허가 트랙을 추정 */
+export function guessPermitTrack(permitHint, { unitsTotal = 0, isApartmentLike = false } = {}) {
+  const s = String(permitHint ?? "");
+  if (/사업계획\s*승인/.test(s)) return { track: "주택법", label: "주택법 제15조(사업계획승인)", basis: `원문 "${s.trim()}"` };
+  if (/건축\s*허가/.test(s)) return { track: "건축법", label: "건축법 제11조(건축허가)", basis: `원문 "${s.trim()}"` };
+  if (isApartmentLike && unitsTotal >= 30)
+    return { track: "주택법", label: "주택법 제15조(사업계획승인) — 추정", basis: `공동주택 계열 ${unitsTotal}세대 ≥ 30세대(추정, 확인 필요)` };
+  return { track: null, label: "확인 필요", basis: "판단 근거 부족" };
+}
+
+/** 사업명·공사명 문구에서 사업유형(신축/증축/재축/리모델링 등) 추정 */
+export function guessProjectType(pjtName) {
+  const s = String(pjtName ?? "");
+  if (/리모델링|대수선/.test(s)) return { type: "전면 대수선(리모델링)", basis: `"${s}" 중 리모델링 관련 키워드` };
+  if (/재축/.test(s)) return { type: "재축", basis: `"${s}" 중 "재축"` };
+  if (/별동\s*증축/.test(s)) return { type: "별동증축", basis: `"${s}" 중 "별동증축"` };
+  if (/증축/.test(s)) return { type: "수평증축", basis: `"${s}" 중 "증축"(별동 여부 확인 필요)` };
+  if (/개축/.test(s)) return { type: "개축", basis: `"${s}" 중 "개축"` };
+  if (/신축/.test(s)) return { type: "신축", basis: `"${s}" 중 "신축"` };
+  return { type: null, basis: "키워드 미검출 — 직접 선택 필요" };
+}
+
+/* ------------------ 12-2. 주차구획 면적 추정 / EPI·신재생 제외용도 ------------------ */
+export const PARKING_STALL_AREA_PER_UNIT = 12.5; // 표준구획 2.5m×5.0m 추정치
+
+/** 대수 → 주차구획 면적(㎡) 추정치. 1,000㎡ 임계치 근방(80대 전후)이면 실측값 입력을 강하게 권고 */
+export function estimateParkingStallArea(parkingCount) {
+  const n = Number(parkingCount) || 0;
+  const area = n * PARKING_STALL_AREA_PER_UNIT;
+  const nearThreshold = area >= 800 && area <= 1200; // 1,000㎡ 임계치 근방
+  return { area, nearThreshold };
+}
+
+/* EPI 냉난방면적 예외 대상(건축법시행령 별표1 제1·5·13·16~17호, 제3호아목) — 근사 매핑.
+ * 정확한 호·목 판정은 표1 원문 대조가 필요하므로 "확인 필요"로 처리하고, 여기서는 후보만 제시 */
+export const EPI_HVAC_EXEMPT_USE_HINTS = [
+  "단독주택", "동물 및 식물관련시설", "자원순환관련시설",
+  "묘지관련시설", "동·식물원", "운동시설"
+];
+
+/* 신·재생에너지 설치의무 제외 용도(certifications.js RE_MANDATORY target 원문과 동기화) */
+export const RE_EXCLUDED_USE_HINTS = [
+  "단독주택", "공동주택", "제1종근린생활시설", "제2종근린생활시설",
+  "위험물저장및처리시설", "자동차관련시설", "동물및식물관련시설",
+  "자원순환관련시설", "발전시설", "공장", "창고시설", "국방·군사시설"
+];
+
 /* --------------------- 13. 증축 유형별 인증 적용 여부 */
 export const EXTENSION_RULE = {
   "수평증축": { 녹색건축:false, 에너지효율:false, ZEB:false,
@@ -695,8 +775,12 @@ export default {
   RE_SOURCE, PUBLIC_RE_RATIO, LOCAL_STANDARD, SIDO_TO_KEY, SIGUNGU_OVERRIDE,
   ZEB, GREEN_HOME, EPI, GSEED, INCENTIVE, U_VALUE, INSULATION_K,
   EXTENSION_RULE, DONATION_RULE,
+  OWNER_TYPE_GUESS, PUBLIC_OWNER_TYPES, PARKING_STALL_AREA_PER_UNIT,
+  EPI_HVAC_EXEMPT_USE_HINTS, RE_EXCLUDED_USE_HINTS,
   normUse, normRegion, resolveSector, resolveSectorSafe, getUnitEnergy,
   regionKeyFor, getRegionFactor, resolveLocalStandard, getLocalTier,
   reProduction, requiredSize, publicRatio, zebGrade, estimateSelfSufficiency,
-  greenHomePv, estimateCost, requiredArea
+  greenHomePv, estimateCost, requiredArea,
+  guessOwnerType, isPublicOwnerType, guessPermitTrack, guessProjectType,
+  estimateParkingStallArea
 };

@@ -12,10 +12,19 @@ export const CERT_SOURCE = {
   lastSynced: "2026-08-26"
 };
 
+/* kind — STEP3 취득 여부 선택 UI 분기용 분류
+ *   mandatory_only    : 요건 충족 시 의무만 존재. 선택 UI 없음(잠금 또는 해당없음).
+ *                       예외·갈음은 전부 STEP5에서 처리.
+ *   lockable_upgrade   : 의무 판정 시에도 상위등급 목표 여부를 선택할 수 있음(잠금+선택).
+ *                       비의무 시에는 자발 취득 여부 + 목표등급을 선택.
+ *   voluntary_re       : 의무 판정 시 잠금(선택 없음). 비의무 시 자발 설치 여부 선택.
+ *   always_voluntary   : 법적 의무대상이 존재하지 않는 완전 자발적 인증.
+ */
 export const CERTIFICATIONS = [
   {
     id: "GREEN_HOME_ENERGY",
     order: 1,
+    kind: "mandatory_only",
     name: "에너지절약형 친환경주택의 건설기준",
     basis: ["주택법 제23조 제1항", "주택건설기준 등에 관한 규정 제64조"],
     target: [
@@ -32,6 +41,7 @@ export const CERTIFICATIONS = [
   {
     id: "HEALTHY_HOME",
     order: 2,
+    kind: "mandatory_only",
     name: "건강친화형 주택 건설기준",
     basis: ["주택법 제37조 제2항", "주택건설기준 등에 관한 규정 제65조"],
     target: ["500세대 이상 공동주택 의무"],
@@ -43,6 +53,7 @@ export const CERTIFICATIONS = [
   {
     id: "CPTED",
     order: 3,
+    kind: "mandatory_only",
     name: "범죄예방 건축기준",
     basis: ["건축법 제53조의2", "건축법 시행령 제65조의7"],
     target: [
@@ -62,6 +73,7 @@ export const CERTIFICATIONS = [
   {
     id: "LONGLIFE_HOUSING",
     order: 4,
+    kind: "lockable_upgrade",
     name: "장수명 주택 건설·인증기준",
     basis: ["주택법 제38조", "주택건설기준 등에 관한 규정 제65조의2"],
     target: ["1,000세대 이상 공동주택 일반등급 이상 의무"],
@@ -73,6 +85,7 @@ export const CERTIFICATIONS = [
   {
     id: "CONDENSATION",
     order: 5,
+    kind: "mandatory_only",
     name: "공동주택 결로 방지를 위한 설계기준",
     basis: ["주택건설기준 등에 관한 규정 제14조의3"],
     target: ["500세대 이상 공동주택 의무"],
@@ -84,6 +97,7 @@ export const CERTIFICATIONS = [
   {
     id: "RE_MANDATORY",
     order: 6,
+    kind: "voluntary_re",
     name: "신·재생에너지 설비 설치의무화 기준",
     basis: [
       "신에너지 및 재생에너지 개발·이용·보급 촉진법 제12조 제2항, 제12조의13 제1항",
@@ -103,6 +117,7 @@ export const CERTIFICATIONS = [
   {
     id: "EPI",
     order: 7,
+    kind: "mandatory_only",
     name: "건축물 에너지절약설계기준(EPI)",
     basis: ["녹색건축물 조성 지원법 제14조", "건축물의 에너지절약 설계기준"],
     target: [
@@ -118,6 +133,7 @@ export const CERTIFICATIONS = [
   {
     id: "ZEB",
     order: 8,
+    kind: "lockable_upgrade",
     name: "제로에너지건축물 인증",
     basis: [
       "녹색건축물 조성 지원법 제17조",
@@ -138,6 +154,7 @@ export const CERTIFICATIONS = [
   {
     id: "GSEED",
     order: 9,
+    kind: "lockable_upgrade",
     name: "녹색건축인증(G-SEED)",
     basis: ["녹색건축물 조성 지원법 제16조", "녹색건축 인증에 관한 규칙", "녹색건축 인증기준"],
     target: [
@@ -156,6 +173,7 @@ export const CERTIFICATIONS = [
   {
     id: "BF",
     order: 10,
+    kind: "lockable_upgrade",
     name: "장애물 없는 생활환경 인증(BF인증)",
     basis: [
       "장애인·노인·임산부 등의 편의증진 보장에 관한 법률",
@@ -178,6 +196,7 @@ export const CERTIFICATIONS = [
   {
     id: "EDU_ENV",
     order: 11,
+    kind: "mandatory_only",
     name: "교육환경평가",
     basis: [
       "도시 및 주거환경 정비법 제52조제1항제11호, 제57조제5항",
@@ -195,6 +214,7 @@ export const CERTIFICATIONS = [
   {
     id: "WATER_TMDL",
     order: 12,
+    kind: "mandatory_only",
     name: "수질오염물질 총량제",
     basis: ["물환경보전법 제4조의2제1항, 영 제3조, 제4조", "오염총량관리 기본방침 제3조, 제16조"],
     target: [
@@ -212,6 +232,7 @@ export const CERTIFICATIONS = [
   {
     id: "INTELLIGENT_BLDG",
     order: 13,
+    kind: "always_voluntary",
     name: "지능형건축물 인증",
     basis: ["건축법 제65조의2", "지능형건축물 인증에 관한 규칙", "지능형건축물 인증기준"],
     target: ["모든 주거시설 및 비주거시설 가능", "자발적인증"],

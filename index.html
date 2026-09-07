@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>신재생에너지 검토 툴</title>
+<title>인허가·인증 5단계 검토 툴</title>
 <style>
   * { box-sizing: border-box; }
   body { margin:0; font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
@@ -11,21 +11,35 @@
   header { background:#1e3a5f; color:#fff; padding:14px 20px; }
   header h1 { margin:0; font-size:18px; display:inline-block; }
   header span { font-size:12px; opacity:.8; margin-left:10px; }
-  .wrap { display:grid; grid-template-columns:360px 1fr; gap:16px; padding:16px; align-items:start; }
+  .wrap { display:grid; grid-template-columns:400px 1fr; gap:16px; padding:16px; align-items:start; }
   .card { background:#fff; border-radius:8px; padding:16px; margin-bottom:14px;
           box-shadow:0 1px 3px rgba(0,0,0,.08); }
-  .card h2 { font-size:14px; margin:0 0 12px; padding-bottom:8px;
-             border-bottom:2px solid #1e3a5f; color:#1e3a5f; }
+  .card h2 { font-size:14px; margin:0 0 4px; padding-bottom:8px;
+             border-bottom:2px solid #1e3a5f; color:#1e3a5f; display:flex; align-items:center; gap:8px; }
+  .stepnum { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px;
+             border-radius:50%; background:#1e3a5f; color:#fff; font-size:11px; flex:none; }
+  .card .stepdesc { font-size:11.5px; color:#6b7280; margin:0 0 10px; line-height:1.5; }
+  fieldset { border:1px solid #e5e7eb; border-radius:6px; padding:10px 10px 4px; margin:10px 0; }
+  fieldset legend { font-size:12px; font-weight:600; color:#1e3a5f; padding:0 4px; }
   label { display:block; font-size:12px; color:#4b5563; margin:8px 0 3px; }
+  label .req { color:#dc2626; font-weight:700; margin-left:2px; }
+  label .auto { color:#2563eb; font-weight:600; margin-left:4px; font-size:10.5px; }
+  label .ext { color:#7c3aed; font-weight:600; margin-left:4px; font-size:10.5px; }
   input, select, textarea { width:100%; padding:7px 8px; border:1px solid #d1d5db;
              border-radius:4px; font-size:13px; font-family:inherit; }
   textarea { resize:vertical; min-height:64px; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
   .chk { display:flex; align-items:center; gap:6px; margin-top:8px; }
   .chk input { width:auto; }
+  .chk label { margin:0; }
   button { width:100%; padding:12px; background:#1e3a5f; color:#fff; border:none;
            border-radius:5px; font-size:15px; font-weight:bold; cursor:pointer; }
   button:hover { background:#2c5282; }
+  button.secondary { background:#2c5282; }
+  button.go { background:#16a34a; }
+  button.go:hover { background:#15803d; }
+  button:disabled { background:#9ca3af; cursor:not-allowed; }
   #report { min-height:200px; }
   .alert { border-radius:6px; padding:12px 14px; margin-bottom:12px; font-size:13px; }
   .alert.error { background:#fef2f2; border-left:4px solid #dc2626; color:#991b1b; }
@@ -40,116 +54,238 @@
   td.num { text-align:right; font-variant-numeric:tabular-nums; }
   h3 { font-size:13px; color:#1e3a5f; margin:18px 0 6px; }
   .muted { color:#6b7280; font-size:12px; }
+
+  /* STEP3 취득여부 선택 리스트 */
+  .acq-row { display:flex; align-items:flex-start; gap:8px; padding:8px 4px; border-bottom:1px solid #f1f5f9; }
+  .acq-row:last-child { border-bottom:none; }
+  .acq-row .acq-main { flex:1; }
+  .acq-row .acq-name { font-weight:600; font-size:13px; }
+  .acq-row .acq-reason { font-size:11.5px; color:#6b7280; margin-top:2px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .badge.locked { background:#fee2e2; color:#991b1b; }
+  .badge.optional { background:#dbeafe; color:#1e40af; }
+  .badge.none { background:#f3f4f6; color:#6b7280; }
+  .badge.locked-opt { background:#fef3c7; color:#92400e; }
+
+  /* STEP4 조건부 입력 블록 */
+  .cond-block { display:none; border:1px solid #cbd5e1; border-radius:6px; padding:10px; margin-bottom:10px; background:#f8fafc; }
+  .cond-block.show { display:block; }
+  .cond-block h4 { margin:0 0 8px; font-size:12.5px; color:#1e3a5f; }
+
+  .stepbar { display:flex; gap:6px; margin-bottom:14px; }
+  .stepbar div { flex:1; text-align:center; padding:6px 2px; border-radius:4px; font-size:11px;
+                 background:#e5e7eb; color:#6b7280; font-weight:600; }
+  .stepbar div.active { background:#1e3a5f; color:#fff; }
+  .stepbar div.done { background:#16a34a; color:#fff; }
 </style>
 </head>
 <body>
 
-<header><h1>신재생에너지 검토 툴</h1><span id="ver"></span></header>
+<header><h1>인허가·인증 5단계 검토 툴</h1><span id="ver"></span></header>
 
 <div class="wrap">
   <!-- ===== 입력 ===== -->
   <form id="form" onsubmit="return false;">
 
-    <div class="card">
-      <h2>설계개요 자동입력</h2>
-      <label>① 이미지 또는 PDF 파일 업로드 (도면의 "설계개요" 캡처/스캔본)</label>
-      <input type="file" id="overviewFile" accept="image/*,application/pdf">
-      <div class="muted" id="ocrStatus" style="margin-top:6px;">이미지는 OCR로, PDF는 텍스트 레이어(없으면 OCR)로 자동 인식합니다. 파일이 클수록 시간이 걸릴 수 있습니다.</div>
+    <div class="stepbar">
+      <div id="sb1">STEP1 OCR추출</div>
+      <div id="sb2">STEP2 필수입력</div>
+      <div id="sb3">STEP3 취득선택</div>
+      <div id="sb4">STEP4 조건부입력</div>
+      <div id="sb5">STEP5 예외입력</div>
+    </div>
 
-      <label style="margin-top:14px;">② 또는 텍스트를 직접 붙여넣기 (위에서 인식된 텍스트도 여기 채워지며, 수정 가능)</label>
+    <!-- ============ STEP 1 : 공사개요 OCR 추출 ============ -->
+    <div class="card">
+      <h2><span class="stepnum">1</span> STEP 1. 공사개요 OCR 추출</h2>
+      <p class="stepdesc">건축개요표·사업개요표에서 자동 추출만 수행합니다. 사용자 입력 없이 STEP2 필드를 최대한 채웁니다.</p>
+
+      <label>① 이미지 또는 PDF 파일 업로드 (도면의 "설계개요"·"사업개요" 캡처/스캔본)</label>
+      <input type="file" id="overviewFile" accept="image/*,application/pdf">
+      <div class="muted" id="ocrStatus" style="margin-top:6px;">이미지는 OCR로, PDF는 텍스트 레이어(없으면 OCR)로 자동 인식합니다.</div>
+
+      <label style="margin-top:14px;">② 또는 텍스트를 직접 붙여넣기 (수정 가능)</label>
       <textarea id="overviewText" placeholder="예)
-대지위치  서울특별시 영등포구 영등포동2가 94-143번지
-대지면적  1,382.00㎡
-층 수    지하4층 ~ 지상10층
+사업명     OO지구 공동주택 신축공사
+대지위치   서울특별시 영등포구 영등포동2가 94-143번지
+대지면적   1,382.00㎡
+층 수      지하4층 ~ 지상10층
 지상연면적 6,850.98㎡
 지하연면적 2,996.47㎡
-용도     방송통신시설 중 데이터센터
-..." style="min-height:90px;"></textarea>
+용도       방송통신시설 중 데이터센터
+세대수     456세대
+건축주     OO도시공사
+공사기간   2026.03 ~ 2028.09
+..." style="min-height:100px;"></textarea>
       <div class="row2" style="margin-top:8px;">
-        <button type="button" id="parseOverview" style="background:#2c5282;">③ 인식하기</button>
-        <button type="button" id="applyOverview" style="background:#16a34a;" disabled>④ 폼에 적용</button>
+        <button type="button" id="parseOverview" class="secondary">③ 인식하기</button>
+        <button type="button" id="applyOverview" class="go" disabled>④ STEP2에 적용</button>
       </div>
-      <div class="muted" style="margin-top:6px;">인식 결과는 적용 전 미리보기에서 확인·수정할 수 있습니다.</div>
+      <div class="muted" style="margin-top:6px;">인식 결과는 적용 전 미리보기에서 확인·수정할 수 있습니다. 신뢰도가 낮은 항목은 STEP2에서 반드시 재확인하세요.</div>
       <div id="overviewPreview" style="margin-top:10px;"></div>
     </div>
 
+    <!-- ============ STEP 2 : 필수 입력값 ============ -->
     <div class="card">
-      <h2>STEP 0. 기초정보</h2>
-      <label>프로젝트명</label>
-      <input id="pjtName" value="OO빌딩 리모델링">
+      <h2><span class="stepnum">2</span> STEP 2. 필수 입력값 (OCR 프리필 + 확인)</h2>
+      <p class="stepdesc">13개 제도 판정에 반드시 필요한 값입니다. <b>owner_type</b>은 OCR로 추정만 하고 반드시 사용자가 확정해야 합니다(신재생·ZEB·BF 3개 제도 동시 오판 방지).</p>
 
-      <div class="row2">
-        <div>
-          <label>인허가 신청 예정일</label>
-          <input type="date" id="permitDate" value="2026-11-15">
-        </div>
-        <div>
-          <label>설치계획서 접수일</label>
-          <input type="date" id="planDate">
-        </div>
-      </div>
+      <fieldset>
+        <legend>A. 인허가·주체 (최상위 분기)</legend>
 
-      <label>발주자 유형</label>
-      <select id="clientType">
-        <option value="private">민간</option>
-        <option value="public">공공</option>
-      </select>
+        <label>사업명·공사명 (proj_name) <span class="auto">OCR 자동</span></label>
+        <input id="proj_name" value="OO빌딩 리모델링">
 
-      <label>행위 유형</label>
-      <select id="actType">
-        <option>신축</option><option>재축</option><option>개축</option>
-        <option>별동증축</option><option>수평증축</option>
-        <option selected>전면 대수선(리모델링)</option>
-      </select>
+        <label>건축주·시행자 (owner_name) <span class="auto">OCR 자동</span></label>
+        <input id="owner_name" placeholder="예: OO도시공사, OO시장, OO주식회사">
 
-      <div class="row2">
-        <div>
-          <label>시·도</label>
-          <select id="sido">
-            <option>서울특별시</option><option>부산광역시</option><option>대구광역시</option>
-            <option>인천광역시</option><option>광주광역시</option><option>대전광역시</option>
-            <option>울산광역시</option><option>세종특별자치시</option><option>경기도</option>
-            <option>강원특별자치도</option><option>충청북도</option><option>충청남도</option>
-            <option>전북특별자치도</option><option>전라남도</option><option>경상북도</option>
-            <option>경상남도</option><option>제주특별자치도</option>
-          </select>
+        <label>발주주체 구분 (owner_type) <span class="req">필수·확정</span></label>
+        <select id="owner_type">
+          <option value="민간" selected>민간</option>
+          <option value="지방자치단체">지방자치단체</option>
+          <option value="공공주택사업자">공공주택사업자 (LH·SH·GH 등)</option>
+          <option value="공공기관">공공기관 (공사·공단 등)</option>
+          <option value="교육감">교육감</option>
+          <option value="중앙행정기관">중앙행정기관</option>
+        </select>
+        <div class="muted" id="ownerTypeGuessHint" style="margin-top:4px;"></div>
+
+        <label>인허가 유형 (permit_track) <span class="auto">OCR 추정</span> <span class="req">확정</span></label>
+        <select id="permit_track">
+          <option value="확인필요" selected>확인 필요</option>
+          <option value="주택법">주택법 제15조 (사업계획승인)</option>
+          <option value="건축법">건축법 제11조 (건축허가)</option>
+        </select>
+
+        <label>사업유형 (project_type) <span class="auto">OCR 추정</span> <span class="req">확정</span></label>
+        <select id="project_type">
+          <option>신축</option><option>재축</option><option>개축</option>
+          <option>별동증축</option><option>수평증축</option>
+          <option selected>전면 대수선(리모델링)</option>
+        </select>
+      </fieldset>
+
+      <fieldset>
+        <legend>B. 규모·용도</legend>
+
+        <div class="row2">
+          <div><label>연면적 합계 (gfa_total) ㎡ <span class="auto">OCR 자동</span></label><input id="gfa_total" value="11360.2"></div>
+          <div><label>냉난방 공간 연면적 (gfa_hvac) ㎡ <span class="req">수동 필수</span></label><input id="gfa_hvac" value="11360.2"></div>
         </div>
-        <div>
-          <label>시·군·구</label>
-          <input id="sigungu" list="sigunguHint" value="강서구" placeholder="예: 강서구, 고양시">
-          <datalist id="sigunguHint">
-            <option>고양시</option><option>강릉시</option><option>동해시</option>
-            <option>삼척시</option><option>속초시</option><option>고성군</option>
-            <option>양양군</option>
-          </datalist>
+        <div class="muted" style="margin-top:2px;">gfa_hvac 기본값은 gfa_total과 동일합니다. EPI 제출 예외(별표1 제1·3아·5·13·16~17호, 500㎡ 미만) 판정에 사용되므로 설계값으로 보정하세요.</div>
+
+        <label style="margin-top:10px;">용도 구성 — 별표1 용도코드(use_code_list) (용도,부문,면적 / 줄바꿈) <span class="auto">OCR 매핑</span> <span class="req">확정</span></label>
+        <textarea id="useMix">방송통신시설,공공용,11360.2</textarea>
+        <div class="muted">부문 생략 가능. 틀리면 표1 기준으로 자동 보정됩니다. 복합용도는 줄을 추가하세요.</div>
+
+        <div class="row2" style="margin-top:10px;">
+          <div>
+            <label>총 세대수 (units_total) <span class="auto">OCR 자동</span></label>
+            <input id="units_total" value="0">
+          </div>
+          <div>
+            <label>주택 세부유형 (house_subtype) <span class="auto">OCR 추정</span> <span class="req">확정</span></label>
+            <select id="house_subtype">
+              <option value="비주거/기타" selected>비주거/기타 (해당없음)</option>
+              <option value="공동주택(사업계획승인)">공동주택(사업계획승인 대상, 30세대~)</option>
+              <option value="도시형생활주택">도시형생활주택(50세대~)</option>
+              <option value="주상복합아파트">주상복합아파트(300세대~)</option>
+            </select>
+          </div>
         </div>
-      </div>
-      <div class="muted" id="localHint" style="margin-top:6px;"></div>
+
+        <div class="row2" style="margin-top:10px;">
+          <div><label>지상 층수 (floors_above) <span class="auto">OCR 자동</span></label><input id="floors_above" value="0"></div>
+          <div><label>사업지역 면적 (project_site_area) ㎡ <span class="auto">OCR/수동</span></label><input id="project_site_area" value="0"></div>
+        </div>
+        <div class="muted">사업지역 면적은 지역단위 개발사업(BF 지역인증 10만㎡ 기준)에만 입력하세요.</div>
+
+        <div class="row2" style="margin-top:10px;">
+          <div><label>주차대수 (parking_count) <span class="auto">OCR 자동</span></label><input id="parking_count" value="0"></div>
+          <div><label>주차구획 면적 합계 (parking_stall_area) ㎡ <span class="req">수동 필수</span></label><input id="parking_stall_area" value="0"></div>
+        </div>
+        <div class="muted" id="parkingStallHint">대수 × 12.5㎡(2.5m×5.0m) 추정치가 기본 제시됩니다. 1,000㎡ 임계치 근방(80대 전후)이면 실측값을 반드시 입력하세요.</div>
+        <label style="margin-top:6px;">주차장 종류 (parking_kind) <span class="req">수동 필수</span></label>
+        <div class="row3">
+          <div class="chk"><input type="checkbox" id="parking_kind_road"><label for="parking_kind_road">노상</label></div>
+          <div class="chk"><input type="checkbox" id="parking_kind_off"><label for="parking_kind_off">노외</label></div>
+          <div class="chk"><input type="checkbox" id="parking_kind_attached" checked><label for="parking_kind_attached">부설</label></div>
+        </div>
+
+        <div class="chk"><input type="checkbox" id="is_high_rise_complex"><label for="is_high_rise_complex">초고층·준초고층 또는 지하연계 복합건축물 (is_high_rise_complex)</label></div>
+        <div class="chk"><input type="checkbox" id="transportFacility"><label for="transportFacility">교통시설(터미널·철도·공항·항만 등)</label></div>
+        <div class="chk"><input type="checkbox" id="cptedNeighborhood"><label for="cptedNeighborhood">제1·2종 근린생활시설(일용품 소매점·다중생활시설) 해당 — CPTED</label></div>
+        <div class="chk"><input type="checkbox" id="cptedLodging"><label for="cptedLodging">숙박시설 중 다중생활시설 해당 — CPTED</label></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>C. 입지 (외부 조회 필수 — OCR 불가) <span class="ext">외부조회</span></legend>
+
+        <div class="row2">
+          <div>
+            <label>시·도</label>
+            <select id="sido">
+              <option>서울특별시</option><option>부산광역시</option><option>대구광역시</option>
+              <option>인천광역시</option><option>광주광역시</option><option>대전광역시</option>
+              <option>울산광역시</option><option>세종특별자치시</option><option>경기도</option>
+              <option>강원특별자치도</option><option>충청북도</option><option>충청남도</option>
+              <option>전북특별자치도</option><option>전라남도</option><option>경상북도</option>
+              <option>경상남도</option><option>제주특별자치도</option>
+            </select>
+          </div>
+          <div>
+            <label>시·군·구</label>
+            <input id="sigungu" list="sigunguHint" value="강서구" placeholder="예: 강서구, 고양시">
+            <datalist id="sigunguHint">
+              <option>고양시</option><option>강릉시</option><option>동해시</option>
+              <option>삼척시</option><option>속초시</option><option>고성군</option>
+              <option>양양군</option>
+            </datalist>
+          </div>
+        </div>
+        <div class="muted" id="localHint" style="margin-top:6px;"></div>
+
+        <div class="chk"><input type="checkbox" id="redev_district"><label for="redev_district">정비구역 여부 (redev_district) — 도시정비법 정비구역/농어촌정비사업 해당</label></div>
+        <div class="chk"><input type="checkbox" id="edu_within_200m"><label for="edu_within_200m">정비구역 경계 200m 이내 교육시설 존재 (edu_within_200m)</label></div>
+        <div class="chk"><input type="checkbox" id="tmdl_basin"><label for="tmdl_basin">오염총량관리 수계·지역 해당 (tmdl_basin)</label></div>
+        <div class="chk"><input type="checkbox" id="is_special_area"><label for="is_special_area">특별대책지역 여부 (is_special_area)</label></div>
+        <div class="chk"><input type="checkbox" id="eia_target"><label for="eia_target">환경영향평가 대상 여부 (eia_target)</label></div>
+
+        <div class="chk" style="margin-top:12px;"><input type="checkbox" id="local_ordinance_applied"><label for="local_ordinance_applied">지자체 조례 강화 적용 (local_ordinance_applied) — 법정 최소기준을 조례 기준으로 상향</label></div>
+        <div class="row2" id="ordinanceDetail" style="display:none;">
+          <div><label>조례명·조문</label><input id="ordinance_name" placeholder="예: 서울시 녹색건축물 설계기준 제5조"></div>
+          <div><label>강화 기준값</label><input id="ordinance_value" placeholder="예: G-SEED 우수 이상"></div>
+        </div>
+        <div class="muted">⚠ 조례 조회는 여기(STEP2)에서 먼저 확정해야 STEP3의 의무/선택(잠금) 판정이 정확해집니다. 서울시·경기도처럼 민간건축물에 법정 기준보다 강한 등급을 요구하면, "선택"이던 G-SEED·ZEB가 실질적으로 의무가 됩니다.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>D. 시점</legend>
+        <label>사업승인·건축허가 신청예정일 (date_permit_apply) <span class="req">수동 필수</span></label>
+        <input type="date" id="date_permit_apply" value="2026-11-15">
+        <div class="muted">ZEB 민간 공동주택 30세대 의무·신재생 주차장 태양광 의무는 경과규정이 살아있어 신청일이 며칠 차이로 적용결과가 달라집니다.</div>
+
+        <div class="row2" style="margin-top:8px;">
+          <div>
+            <label>착공예정일 (date_start) <span class="auto">OCR 자동</span></label>
+            <input type="date" id="date_start">
+          </div>
+          <div>
+            <label>사용검사 신청예정일 (date_use_inspect) <span class="auto">OCR 추정</span></label>
+            <input type="date" id="date_use_inspect">
+          </div>
+        </div>
+      </fieldset>
     </div>
 
+    <!-- ============ 부지 여건 / 에너지사용계획 (기존 STEP2 잔존 - 계산용) ============ -->
     <div class="card">
-      <h2>STEP 1. 규모·용도</h2>
-      <div class="row2">
-        <div><label>총 연면적(㎡)</label><input id="totalArea" value="11360.2"></div>
-        <div><label>주차장 면적(㎡)</label><input id="parkingArea" value="0"></div>
-      </div>
-      <label>세대수(주거)</label>
-      <input id="households" value="0">
-
-      <label>용도 구성 (용도,부문,면적 / 줄바꿈)</label>
-      <textarea id="useMix">방송통신시설,공공용,11360.2</textarea>
-      <div class="muted">부문 생략 가능. 틀리면 표1 기준으로 자동 보정됩니다.</div>
-
+      <h2><span class="stepnum">·</span> 부지 여건 · 에너지사용계획 (계산 보조입력)</h2>
+      <p class="stepdesc">신재생 설치규모·에너지사용계획 협의 판정에 쓰이는 물리적 조건입니다.</p>
       <div class="row2">
         <div><label>연간 전력(kWh)</label><input id="annualElec" value="24500000"></div>
         <div><label>연간 연료(toe)</label><input id="annualFuel" value="1850"></div>
       </div>
-      <label>1차에너지소요량(kWh/㎡yr, ZEB용·선택)</label>
-      <input id="primaryEnergy" value="0">
-    </div>
-
-    <div class="card">
-      <h2>STEP 2. 부지 여건</h2>
       <div class="row2">
         <div><label>옥상 가용(㎡)</label><input id="roofArea" value="1450"></div>
         <div><label>지하개발(㎡)</label><input id="basementArea" value="14000"></div>
@@ -161,34 +297,183 @@
       <div class="chk"><input type="checkbox" id="geoOk"><label for="geoOk">지열 가능</label></div>
       <div class="chk"><input type="checkbox" id="gasOk" checked><label for="gasOk">가스 인입 충분</label></div>
       <div class="chk"><input type="checkbox" id="hydroOk"><label for="hydroOk">수열 수원 확보</label></div>
-      <div class="chk"><input type="checkbox" id="zebCert"><label for="zebCert">ZEB 인증 취득 예정</label></div>
     </div>
 
-    <div class="card">
-      <h2>STEP 3. 인증 판정 추가정보</h2>
-      <label>주택 유형 (공동주택 계열인 경우 선택)</label>
-      <select id="housingType">
-        <option value="비주거/기타" selected>비주거/기타 (해당없음)</option>
-        <option value="공동주택(사업계획승인)">공동주택(사업계획승인 대상, 30세대~)</option>
-        <option value="도시형생활주택">도시형생활주택(50세대~)</option>
-        <option value="주상복합아파트">주상복합아파트(300세대~)</option>
-      </select>
+    <div style="margin-bottom:14px;"><button type="button" id="evalStep3" class="secondary">STEP 3. 취득 여부 판정 실행 →</button></div>
 
-      <div class="row2">
-        <div><label>사업부지 면적(㎡)</label><input id="siteArea" value="0"></div>
-        <div><label>지상 층수</label><input id="floorsAbove" value="0"></div>
+    <!-- ============ STEP 3 : 취득 여부 선택 ============ -->
+    <div class="card" id="step3Card" style="display:none;">
+      <h2><span class="stepnum">3</span> STEP 3. 취득 여부 선택</h2>
+      <p class="stepdesc">STEP2 판정 결과를 보여준 뒤, 선택 가능한 제도만 노출합니다. 의무 판정된 항목은 잠금(🔒)으로 표시되며 선택권이 없습니다. "해당 없음"과 "선택 가능"은 서로 다른 상태입니다.</p>
+      <div id="step3List"></div>
+    </div>
+
+    <!-- ============ STEP 4 : 조건부 입력 ============ -->
+    <div class="card" id="step4Card" style="display:none;">
+      <h2><span class="stepnum">4</span> STEP 4. 선택에 따른 조건부 입력</h2>
+      <p class="stepdesc">STEP3에서 취득(또는 의무)으로 판정된 제도에 대해서만 아래 필드가 펼쳐집니다.</p>
+
+      <div class="cond-block" data-cert="ZEB">
+        <h4>ZEB (제로에너지건축물 인증)</h4>
+        <div class="row2">
+          <div>
+            <label>목표등급</label>
+            <select id="zeb_target_grade">
+              <option>ZEB Plus</option><option>ZEB 1</option><option>ZEB 2</option>
+              <option>ZEB 3</option><option selected>ZEB 4</option><option>ZEB 5</option>
+            </select>
+          </div>
+          <div><label>에너지자립률 목표(%)</label><input id="zeb_self_ratio" value="0"></div>
+        </div>
+        <label>단위면적당 1차에너지소요량(kWh/㎡·yr)</label>
+        <input id="zeb_primary_energy" value="0">
+        <div class="row2" style="margin-top:6px;">
+          <div>
+            <label>기준 선택 (민간 공동주택)</label>
+            <select id="zeb_std_type"><option value="">해당없음</option><option value="성능기준">성능기준</option><option value="시방기준">시방기준</option></select>
+          </div>
+          <div><label>신재생 설비 종류·용량</label><input id="zeb_re_spec" placeholder="예: 태양광 120kW"></div>
+        </div>
+        <div class="chk"><input type="checkbox" id="zeb_bems" checked><label for="zeb_bems">BEMS 또는 원격검침전자식계량기 설치</label></div>
+        <div class="row2" style="margin-top:6px;">
+          <div><label>예비인증 신청예정일</label><input type="date" id="zeb_precert_date"></div>
+          <div><label>본인증 신청예정일</label><input type="date" id="zeb_finalcert_date"></div>
+        </div>
       </div>
 
-      <div class="chk"><input type="checkbox" id="dormitory"><label for="dormitory">기숙사 (ZEB 의무 제외)</label></div>
+      <div class="cond-block" data-cert="GSEED">
+        <h4>G-SEED (녹색건축인증)</h4>
+        <div class="row2">
+          <div>
+            <label>인증구분</label>
+            <select id="gseed_type">
+              <option>신축-주거</option><option>신축-비주거</option>
+              <option>기존-주거</option><option>기존-비주거</option>
+              <option>그린리모델링-주거</option><option>그린리모델링-비주거</option>
+            </select>
+          </div>
+          <div>
+            <label>목표등급</label>
+            <select id="gseed_target_grade"><option>일반</option><option>우량</option><option selected>우수</option><option>최우수</option></select>
+          </div>
+        </div>
+        <label>전문분야별 예상점수(토지이용·에너지·재료자원·물순환·유지관리·생태환경·실내환경)</label>
+        <textarea id="gseed_scores" style="min-height:48px;" placeholder="예: 토지이용 8/10, 에너지 20/25, ..."></textarea>
+        <label>혁신적설계 적용항목 / 공동주택성능등급 항목별 등급</label>
+        <input id="gseed_innovation" placeholder="적용 항목을 입력">
+        <div class="row2" style="margin-top:6px;">
+          <div><label>예비인증 예정일</label><input type="date" id="gseed_precert_date"></div>
+          <div><label>본인증 예정일</label><input type="date" id="gseed_finalcert_date"></div>
+        </div>
+      </div>
+
+      <div class="cond-block" data-cert="BF">
+        <h4>BF (장애물 없는 생활환경 인증)</h4>
+        <div class="row2">
+          <div>
+            <label>인증구분</label>
+            <select id="bf_type"><option value="지역">지역인증</option><option value="개별">개별시설인증</option></select>
+          </div>
+          <div>
+            <label>개별시설 종류</label>
+            <select id="bf_facility_kind">
+              <option value="">-</option><option>도로</option><option>공원</option>
+              <option>여객시설</option><option>건축물</option><option>교통수단</option>
+            </select>
+          </div>
+        </div>
+        <div class="row2">
+          <div><label>목표등급</label><select id="bf_target_grade"><option>일반</option><option selected>우수</option><option>최우수</option></select></div>
+          <div class="chk" style="margin-top:22px;"><input type="checkbox" id="bf_public_user"><label for="bf_public_user">사용주체 공공 여부</label></div>
+        </div>
+        <div class="row2" style="margin-top:6px;">
+          <div><label>예비인증 예정일</label><input type="date" id="bf_precert_date"></div>
+          <div><label>본인증 예정일</label><input type="date" id="bf_finalcert_date"></div>
+        </div>
+      </div>
+
+      <div class="cond-block" data-cert="LONGLIFE_HOUSING">
+        <h4>장수명 주택</h4>
+        <div class="row2">
+          <div><label>목표등급</label><select id="longlife_target_grade"><option selected>일반</option><option>양호</option><option>우수</option></select></div>
+          <div class="chk" style="margin-top:22px;"><input type="checkbox" id="longlife_incentive"><label for="longlife_incentive">완화 인센티브(용적률·높이) 신청 여부</label></div>
+        </div>
+        <label>항목별 계획(내구성·가변성·수리용이성)</label>
+        <textarea id="longlife_plan" style="min-height:48px;"></textarea>
+        <label>인증서 제출예정일</label>
+        <input type="date" id="longlife_submit_date">
+      </div>
+
+      <div class="cond-block" data-cert="INTELLIGENT_BLDG">
+        <h4>지능형건축물 인증 (자발)</h4>
+        <label>목표등급(1~5)</label>
+        <select id="ib_target_grade"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+        <label>부문별 예상점수(건축계획및환경·기계·전기·정보통신·시스템통합·시설경영관리)</label>
+        <textarea id="ib_scores" style="min-height:48px;"></textarea>
+        <div class="row2" style="margin-top:6px;">
+          <div><label>예비인증 예정일</label><input type="date" id="ib_precert_date"></div>
+          <div><label>본인증 예정일</label><input type="date" id="ib_finalcert_date"></div>
+        </div>
+      </div>
+
+      <div class="cond-block" data-cert="RE_VOLUNTARY">
+        <h4>신재생 자발 설치 (의무 아닌 경우)</h4>
+        <label>설비 종류(태양광·지열·연료전지 등)</label>
+        <input id="re_volunt_kind" placeholder="예: 태양광_고정식">
+        <div class="row2">
+          <div><label>설치용량</label><input id="re_volunt_capacity" value="0"></div>
+          <div><label>공급의무비율 대비 설계값(%)</label><input id="re_volunt_ratio" value="0"></div>
+        </div>
+      </div>
+
+      <div class="cond-block" data-cert="EPI">
+        <h4>EPI (건축물 에너지절약설계기준) — 의무 시 자동 전개</h4>
+        <div class="row2">
+          <div><label>취득 예정 총점</label><input id="epi_target_score" value="0"></div>
+          <div><label>이행검토서 제출예정일</label><input type="date" id="epi_submit_date"></div>
+        </div>
+        <label>단열재 성능·창호 열관류율</label>
+        <input id="epi_envelope_spec" placeholder="예: 외벽 0.17, 창호 1.0">
+        <div class="muted" style="margin-top:4px;">기준값(민간 65점·공공 74점 등)은 tables.js EPI.score 마스터를 참조하며, 여기서는 설계값만 입력합니다.</div>
+      </div>
+    </div>
+
+    <!-- ============ STEP 5 : 예외·갈음 조항 입력 ============ -->
+    <div class="card" id="step5Card" style="display:none;">
+      <h2><span class="stepnum">5</span> STEP 5. 예외·갈음 조항 입력</h2>
+      <p class="stepdesc">의무 판정된 항목의 면제·갈음 사유를 확인하는 최종 검증 단계입니다. 실무 오류가 가장 많이 발생하는 지점입니다. (지자체 조례 강화 입력은 STEP2 C.입지로 이동되어 STEP3 판정보다 먼저 반영됩니다.)</p>
+
+      <div class="chk"><input type="checkbox" id="exempt_epi_by_ecohouse"><label for="exempt_epi_by_ecohouse">친환경주택 기준 적합 → EPI 면제 (근거 성능평가 완료)</label></div>
+      <div class="chk"><input type="checkbox" id="epi_replaced_by_zeb"><label for="epi_replaced_by_zeb">ZEB 인증 취득 → EPI 갈음</label></div>
+
+      <div class="chk"><input type="checkbox" id="is_permit_change"><label for="is_permit_change">500㎡ 미만 허가 후 변경허가·변경신고 건 (is_permit_change)</label></div>
+      <div id="permitChangeDetail" style="display:none;">
+        <label>당초 허가 연면적(original_permit_gfa) ㎡</label>
+        <input id="original_permit_gfa" value="0">
+      </div>
+
+      <div class="chk"><input type="checkbox" id="local_bldg_committee_reviewed"><label for="local_bldg_committee_reviewed">교육환경평가 심의 갈음 (지방건축위원회 심의로 대체, 법제처 17-0145)</label></div>
+      <div class="row2" id="committeeDetail" style="display:none;">
+        <div><label>심의일자</label><input type="date" id="committee_review_date"></div>
+        <div><label>심의번호</label><input id="committee_review_no"></div>
+      </div>
+
       <div class="chk"><input type="checkbox" id="militaryExclude"><label for="militaryExclude">군부대주둔지 내 국방·군사시설 (G-SEED 제외)</label></div>
-      <div class="chk"><input type="checkbox" id="cptedNeighborhood"><label for="cptedNeighborhood">근린생활시설(일용품 소매점·다중생활시설) 해당</label></div>
-      <div class="chk"><input type="checkbox" id="cptedLodging"><label for="cptedLodging">숙박시설 중 다중생활시설 해당</label></div>
-      <div class="chk"><input type="checkbox" id="parkingStandalone"><label for="parkingStandalone">독립 주차장(노상·노외) 사업임</label></div>
-      <div class="chk"><input type="checkbox" id="ultraHighRise"><label for="ultraHighRise">초고층/준초고층·지하연계 복합건축물</label></div>
-      <div class="chk"><input type="checkbox" id="transportFacility"><label for="transportFacility">교통시설(터미널·철도·공항·항만 등)</label></div>
-      <div class="chk"><input type="checkbox" id="redevelopmentZone"><label for="redevelopmentZone">도시정비법 정비구역/농어촌정비사업 해당</label></div>
-      <div class="chk"><input type="checkbox" id="nearEduFacility"><label for="nearEduFacility">정비구역 경계 200m 이내 교육시설 존재</label></div>
-      <div class="chk"><input type="checkbox" id="watershedTarget"><label for="watershedTarget">특정유역 하수배출/환경영향평가 대상사업</label></div>
+      <div class="chk"><input type="checkbox" id="dormitory"><label for="dormitory">기숙사 (ZEB 의무 제외)</label></div>
+
+      <div class="chk"><input type="checkbox" id="tmdl_covered_by_eia"><label for="tmdl_covered_by_eia">오염총량 협의 — 환경영향평가로 갈음 검토 (tmdl_covered_by_eia)</label></div>
+
+      <div class="chk"><input type="checkbox" id="apply_previous_law"><label for="apply_previous_law">경과규정 — 구법 적용 (apply_previous_law)</label></div>
+      <div id="prevLawDetail" style="display:none;">
+        <label>적용 법령 버전</label>
+        <input id="previous_law_version" placeholder="예: 2024.12.31 개정 전 기준">
+      </div>
+
+      <div class="chk"><input type="checkbox" id="prior_cert_exists"><label for="prior_cert_exists">기존 인증 유효 (재인증 대상 건)</label></div>
+      <div class="row2" id="priorCertDetail" style="display:none;">
+        <div><label>기존 인증번호(prior_cert_id)</label><input id="prior_cert_id"></div>
+        <div><label>유효기간(prior_cert_expiry)</label><input type="date" id="prior_cert_expiry"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -197,17 +482,17 @@
       <input id="ovRatio" value="0">
       <label>사유</label>
       <input id="ovReason" value="심의위원 의견">
-      <div style="margin-top:14px;"><button id="run">검토 실행</button></div>
+      <div style="margin-top:14px;"><button id="run" class="go">최종 리포트 생성</button></div>
     </div>
   </form>
 
   <!-- ===== 결과 ===== -->
-  <div id="report" class="card"><span class="muted">좌측 입력 후 [검토 실행]을 눌러주세요.</span></div>
+  <div id="report" class="card"><span class="muted">좌측 STEP1~2 입력 후 [STEP3 취득 여부 판정 실행]을 눌러주세요.</span></div>
 </div>
 
 <!-- 이미지/PDF 인식용 라이브러리 (CDN) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-<script type="module" src="./engine.js?v=20260826c"></script>
+<script type="module" src="./engine.js?v=20260907"></script>
 </body>
 </html>
