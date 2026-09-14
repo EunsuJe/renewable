@@ -856,5 +856,5 @@ export default {
   reProduction, requiredSize, publicRatio, zebGrade, estimateSelfSufficiency,
   greenHomePv, estimateCost, requiredArea,
   guessOwnerType, isPublicOwnerType, guessPermitTrack, guessProjectType,
-  estimateParkingStallArea
+  estimateParkingStallArea, normalizeSigunguForOverride
 };
