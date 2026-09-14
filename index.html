@@ -1458,42 +1458,897 @@
 </script>
 
 <!-- App diagnostic loader -->
-<script type="module">
+<script>
 (function () {
-  const VERSION = "20260914-applyfix1";
+  "use strict";
 
-  function show(message) {
-    const node = document.getElementById("ocrStatus");
-    if (node) node.textContent = message;
-    console.log("[APP]", message);
+  const VERSION = "autofill-v2-direct-20260914";
+
+  function $(id) {
+    return document.getElementById(id);
   }
 
-  window.addEventListener("error", function (event) {
-    const message = event.message || "알 수 없는 JS 오류";
-    show("JS 오류: " + message);
-    console.error("[APP ERROR]", event.error || event);
-  });
+  function text(value) {
+    return value === undefined || value === null ? "" : String(value).trim();
+  }
 
-  window.addEventListener("unhandledrejection", function (event) {
-    const reason = event.reason;
-    const message =
-      reason && reason.message ? reason.message : String(reason || "알 수 없는 Promise 오류");
+  function compact(value) {
+    return text(value)
+      .replace(/\s+/g, "")
+      .replace(/[·ㆍ]/g, "")
+      .toLowerCase();
+  }
 
-    show("JS Promise 오류: " + message);
-    console.error("[APP PROMISE ERROR]", reason);
-  });
+  function show(message) {
+    const node = $("ocrStatus");
+    if (node) node.textContent = message;
+    console.log("[AUTO2]", message);
+  }
 
-  import("./engine.js?v=" + VERSION)
-    .then(function () {
-      show("앱 준비 완료");
-      console.log("[APP] engine.js loaded");
-    })
-    .catch(function (err) {
-      const message = err && err.message ? err.message : String(err);
-      show("engine.js 로드 오류: " + message);
-      console.error("[APP] engine.js load failed", err);
+  function escHtml(value) {
+    return text(value).replace(/[&<>"']/g, function (ch) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[ch];
     });
+  }
+
+  function cleanLine(line) {
+    return text(line)
+      .replace(/-----\s*page\s*\d+\s*-----/gi, "")
+      .replace(/[┃│|]/g, " ")
+      .replace(/[□■●○▶▷◆◇※]/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  function escapeRegExp(value) {
+    return text(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  const LABEL_WORDS = [
+    "사업명",
+    "공사명",
+    "프로젝트명",
+    "건축물명",
+    "건물명",
+    "대지위치",
+    "대지소재지",
+    "건축위치",
+    "소재지",
+    "위치",
+    "건축구분",
+    "사업구분",
+    "공사종류",
+    "공사종별",
+    "주용도",
+    "주요용도",
+    "건축물용도",
+    "용도",
+    "대지면적",
+    "건축면적",
+    "연면적",
+    "총연면적",
+    "용적률",
+    "건폐율",
+    "규모",
+    "층수",
+    "지상",
+    "지하",
+    "세대수",
+    "가구수",
+    "허가일",
+    "신고일",
+    "건축허가일",
+    "사용승인예정일",
+    "사용승인일",
+    "준공예정일",
+    "공공건축물",
+    "공공건축물여부",
+    "발주구분",
+    "건축주구분"
+  ];
+
+  function stripValue(value) {
+    return cleanLine(value)
+      .replace(/^[\s:：=\-_/]+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function cutAtNextLabel(value) {
+    let v = stripValue(value);
+    const labelPattern = LABEL_WORDS.map(escapeRegExp).join("|");
+    const re = new RegExp("\\s+(?:" + labelPattern + ")\\s*[:：]", "i");
+    const idx = v.search(re);
+
+    if (idx > 0) {
+      v = v.slice(0, idx);
+    }
+
+    return stripValue(v);
+  }
+
+  function makeLooseLabelRegex(label) {
+    const chars = compact(label)
+      .split("")
+      .map(escapeRegExp)
+      .join("\\s*");
+
+    return new RegExp(chars + "\\s*[:：]?", "i");
+  }
+
+  function looksLikeOnlyUnit(value) {
+    return /^[㎡m²m2\s.:\-_=]+$/i.test(text(value));
+  }
+
+  function looksLikeAnyLabel(line) {
+    const c = compact(line);
+
+    return LABEL_WORDS.some(function (label) {
+      const lc = compact(label);
+      return c === lc || c.startsWith(lc + ":") || c.startsWith(lc + "：");
+    });
+  }
+
+  function linesOf(source) {
+    return text(source)
+      .replace(/\r/g, "\n")
+      .split(/\n+/)
+      .map(cleanLine)
+      .filter(Boolean);
+  }
+
+  function valueAfterLabel(lines, labels, options) {
+    const opts = options || {};
+    const regexes = labels.map(makeLooseLabelRegex);
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const lineCompact = compact(line);
+
+      if (opts.skip && opts.skip.some(function (re) { return re.test(lineCompact); })) {
+        continue;
+      }
+
+      for (const re of regexes) {
+        const m = line.match(re);
+
+        if (!m) continue;
+
+        let after = line.slice(m.index + m[0].length);
+        after = cutAtNextLabel(after);
+
+        if (after && !looksLikeOnlyUnit(after)) {
+          return after;
+        }
+
+        for (let j = i + 1; j <= i + 3 && j < lines.length; j += 1) {
+          const next = cleanLine(lines[j]);
+
+          if (!next) continue;
+          if (looksLikeAnyLabel(next)) break;
+
+          return cutAtNextLabel(next);
+        }
+      }
+    }
+
+    return "";
+  }
+
+  const NUMBER_PATTERN = /-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/g;
+
+  function extractFirstNumber(value) {
+    const m = text(value).match(/-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/);
+    return m ? m[0] : "";
+  }
+
+  function normalizeNumber(value) {
+    return text(value)
+      .replace(/㎡|m²|m2|제곱미터/gi, "")
+      .replace(/[^\d.,-]/g, "")
+      .replace(/,$/, "")
+      .trim();
+  }
+
+  function numberAfterLabel(lines, labels, options) {
+    const value = valueAfterLabel(lines, labels, options);
+    const fromValue = extractFirstNumber(value);
+
+    if (fromValue) return fromValue;
+
+    const opts = options || {};
+    const regexes = labels.map(makeLooseLabelRegex);
+
+    for (const line of lines) {
+      const lineCompact = compact(line);
+
+      if (opts.skip && opts.skip.some(function (re) { return re.test(lineCompact); })) {
+        continue;
+      }
+
+      for (const re of regexes) {
+        const m = line.match(re);
+
+        if (!m) continue;
+
+        const after = line.slice(m.index + m[0].length);
+        const num = extractFirstNumber(after);
+
+        if (num) return num;
+      }
+    }
+
+    return "";
+  }
+
+  function normalizeDate(value) {
+    const source = text(value);
+
+    if (!source) return "";
+
+    let m = source.match(/((?:19|20)\d{2})\D{0,5}(\d{1,2})\D{0,5}(\d{1,2})/);
+
+    if (!m) {
+      m = source.match(/((?:19|20)\d{2})(\d{2})(\d{2})/);
+    }
+
+    if (!m) return "";
+
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+
+    if (!year || month < 1 || month > 12 || day < 1 || day > 31) {
+      return "";
+    }
+
+    return [
+      String(year),
+      String(month).padStart(2, "0"),
+      String(day).padStart(2, "0")
+    ].join("-");
+  }
+
+  function dateAfterLabel(lines, labels) {
+    const value = valueAfterLabel(lines, labels);
+    const fromValue = normalizeDate(value);
+
+    if (fromValue) return fromValue;
+
+    const regexes = labels.map(makeLooseLabelRegex);
+
+    for (const line of lines) {
+      for (const re of regexes) {
+        if (!re.test(line)) continue;
+
+        const date = normalizeDate(line);
+        if (date) return date;
+      }
+    }
+
+    return "";
+  }
+
+  const SIDO_RULES = [
+    [/서울|서울특별시|서울시/, "서울특별시"],
+    [/부산|부산광역시/, "부산광역시"],
+    [/대구|대구광역시/, "대구광역시"],
+    [/인천|인천광역시/, "인천광역시"],
+    [/광주|광주광역시/, "광주광역시"],
+    [/대전|대전광역시/, "대전광역시"],
+    [/울산|울산광역시/, "울산광역시"],
+    [/세종|세종특별자치시/, "세종특별자치시"],
+    [/경기|경기도/, "경기도"],
+    [/강원|강원특별자치도|강원도/, "강원특별자치도"],
+    [/충북|충청북도/, "충청북도"],
+    [/충남|충청남도/, "충청남도"],
+    [/전북|전라북도|전북특별자치도/, "전북특별자치도"],
+    [/전남|전라남도/, "전라남도"],
+    [/경북|경상북도/, "경상북도"],
+    [/경남|경상남도/, "경상남도"],
+    [/제주|제주특별자치도|제주도/, "제주특별자치도"]
+  ];
+
+  function normalizeSido(value) {
+    const source = text(value);
+
+    for (const pair of SIDO_RULES) {
+      if (pair[0].test(source)) return pair[1];
+    }
+
+    return source;
+  }
+
+  function findAddress(source) {
+    const joined = linesOf(source).join("\n");
+
+    const sidoPattern =
+      "(서울특별시|서울시|부산광역시|대구광역시|인천광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기도|강원특별자치도|강원도|충청북도|충청남도|전북특별자치도|전라북도|전라남도|경상북도|경상남도|제주특별자치도|제주도)";
+
+    const re = new RegExp(sidoPattern + "\\s+[^\\n]{2,100}", "i");
+    const m = joined.match(re);
+
+    return m ? cutAtNextLabel(m[0]) : "";
+  }
+
+  function inferSigungu(address) {
+    let source = text(address);
+
+    if (!source) return "";
+
+    source = source.replace(
+      /^(.*?)(서울특별시|서울시|부산광역시|대구광역시|인천광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기도|강원특별자치도|강원도|충청북도|충청남도|전북특별자치도|전라북도|전라남도|경상북도|경상남도|제주특별자치도|제주도)\s*/,
+      ""
+    );
+
+    let m = source.match(/([가-힣]+시)\s*([가-힣]+구)/);
+    if (m) return m[1] + " " + m[2];
+
+    m = source.match(/([가-힣]+(?:시|군|구))/);
+    return m ? m[1] : "";
+  }
+
+  const ALL_USES = [
+    "제1종근린생활시설",
+    "제2종근린생활시설",
+    "근린생활시설",
+    "공동주택",
+    "단독주택",
+    "아파트",
+    "연립주택",
+    "다세대주택",
+    "오피스텔",
+    "업무시설",
+    "판매시설",
+    "문화 및 집회시설",
+    "종교시설",
+    "의료시설",
+    "교육연구시설",
+    "노유자시설",
+    "수련시설",
+    "운동시설",
+    "숙박시설",
+    "위락시설",
+    "공장",
+    "창고시설",
+    "위험물 저장 및 처리시설",
+    "자동차관련시설",
+    "동물 및 식물관련시설",
+    "자원순환관련시설",
+    "교정 및 군사시설",
+    "방송통신시설",
+    "발전시설",
+    "묘지관련시설",
+    "장례시설",
+    "관광휴게시설",
+    "지하주차장",
+    "주차장"
+  ].sort(function (a, b) {
+    return compact(b).length - compact(a).length;
+  });
+
+  function findKnownUse(value, includeParking) {
+    const source = compact(value);
+
+    if (!source) return "";
+
+    for (const use of ALL_USES) {
+      if (!includeParking && /주차장/.test(use)) continue;
+
+      if (source.includes(compact(use))) {
+        if (use === "아파트" || use === "연립주택" || use === "다세대주택") {
+          return "공동주택";
+        }
+
+        return use;
+      }
+    }
+
+    return "";
+  }
+
+  function cleanupUse(value) {
+    let v = cutAtNextLabel(value);
+
+    if (!v) return "";
+
+    v = v
+      .replace(/용도지역.*$/g, "")
+      .replace(/용도지구.*$/g, "")
+      .replace(/용도구역.*$/g, "")
+      .trim();
+
+    const hits = [];
+
+    for (const use of ALL_USES) {
+      if (/주차장/.test(use)) continue;
+
+      if (compact(v).includes(compact(use))) {
+        const normalized =
+          use === "아파트" || use === "연립주택" || use === "다세대주택"
+            ? "공동주택"
+            : use;
+
+        if (!hits.includes(normalized)) hits.push(normalized);
+      }
+    }
+
+    if (hits.length) return hits.slice(0, 3).join(" + ");
+
+    return v.slice(0, 80);
+  }
+
+  function parseProjectType(source, lines) {
+    const labeled = valueAfterLabel(lines, [
+      "건축구분",
+      "사업구분",
+      "공사종류",
+      "공사종별",
+      "허가구분"
+    ]);
+
+    const target = compact(labeled || source);
+
+    const types = [
+      "용도변경",
+      "리모델링",
+      "대수선",
+      "신축",
+      "증축",
+      "개축",
+      "재축",
+      "이전"
+    ];
+
+    for (const type of types) {
+      if (target.includes(compact(type))) return type;
+    }
+
+    return "";
+  }
+
+  function parseOwnerAndPublic(lines) {
+    const result = {
+      ownerType: "",
+      publicYn: ""
+    };
+
+    const owner = valueAfterLabel(lines, [
+      "발주구분",
+      "건축주구분",
+      "공공민간",
+      "공공 민간",
+      "건축주"
+    ]);
+
+    const publicValue = valueAfterLabel(lines, [
+      "공공건축물여부",
+      "공공건축물",
+      "공공여부"
+    ]);
+
+    const ownerCompact = compact(owner);
+    const publicCompact = compact(publicValue);
+
+    if (/국가/.test(ownerCompact)) result.ownerType = "국가";
+    else if (/지방자치|지자체/.test(ownerCompact)) result.ownerType = "지방자치단체";
+    else if (/공공기관/.test(ownerCompact)) result.ownerType = "공공기관";
+    else if (/공공/.test(ownerCompact)) result.ownerType = "공공";
+    else if (/민간/.test(ownerCompact)) result.ownerType = "민간";
+
+    if (/예|해당|공공|국가|지방자치|공공기관/.test(publicCompact + ownerCompact)) {
+      result.publicYn = "예";
+    } else if (/아니오|아니요|비해당|민간/.test(publicCompact + ownerCompact)) {
+      result.publicYn = "아니오";
+    }
+
+    return result;
+  }
+
+  function parseScale(source, lines) {
+    const result = {
+      floors: "",
+      basementFloors: ""
+    };
+
+    const c = compact(source);
+
+    let m = c.match(/지하(\d+)층?.{0,30}지상(\d+)층?/);
+    if (m) {
+      result.basementFloors = m[1];
+      result.floors = m[2];
+      return result;
+    }
+
+    m = c.match(/지상(\d+)층?.{0,30}지하(\d+)층?/);
+    if (m) {
+      result.floors = m[1];
+      result.basementFloors = m[2];
+      return result;
+    }
+
+    result.floors = numberAfterLabel(lines, ["지상층수", "지상"]);
+    result.basementFloors = numberAfterLabel(lines, ["지하층수", "지하"]);
+
+    return result;
+  }
+
+  function chooseAreaNumber(line) {
+    const nums = text(line).match(NUMBER_PATTERN) || [];
+
+    if (!nums.length) return "";
+
+    const hasAreaUnit = /㎡|m²|m2|제곱미터/i.test(line);
+
+    for (let i = nums.length - 1; i >= 0; i -= 1) {
+      const raw = nums[i];
+      const n = Number(raw.replace(/,/g, ""));
+
+      if (!Number.isFinite(n) || n <= 0) continue;
+
+      if (!hasAreaUnit && n < 10) continue;
+
+      return raw;
+    }
+
+    return "";
+  }
+
+  function parseUseMix(lines) {
+    const rows = [];
+    const seen = new Set();
+
+    const skipRe =
+      /대지면적|건축면적|연면적|총연면적|용적률|건폐율|높이|층수|규모|세대수|가구수|호수|주차대수|대지위치|사업명|공사명|허가|신고|사용승인|지역지구|용도지역|용도지구|용도구역/;
+
+    function addRow(use, area) {
+      if (!use || !area) return;
+
+      const key = compact(use) + "|" + normalizeNumber(area);
+
+      if (seen.has(key)) return;
+
+      seen.add(key);
+      rows.push(use + ", " + area);
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const lineCompact = compact(line);
+
+      if (skipRe.test(lineCompact)) continue;
+
+      const use = findKnownUse(line, true);
+
+      if (!use) continue;
+
+      let area = chooseAreaNumber(line);
+
+      if (!area) {
+        for (let j = i + 1; j <= i + 2 && j < lines.length; j += 1) {
+          const next = lines[j];
+
+          if (looksLikeAnyLabel(next)) break;
+
+          area = chooseAreaNumber(next);
+          if (area) break;
+        }
+      }
+
+      addRow(use, area);
+    }
+
+    return rows.slice(0, 30).join("\n");
+  }
+
+  function parseDirect(source) {
+    const lines = linesOf(source);
+    const data = {};
+
+    data.projectName = valueAfterLabel(lines, [
+      "사업명",
+      "공사명",
+      "프로젝트명",
+      "건축물명",
+      "건물명"
+    ]);
+
+    data.projectType = parseProjectType(source, lines);
+
+    const owner = parseOwnerAndPublic(lines);
+    data.ownerType = owner.ownerType;
+    data.publicYn = owner.publicYn;
+
+    data.siteLocation =
+      valueAfterLabel(lines, ["대지위치", "대지소재지", "건축위치", "소재지", "위치"], {
+        skip: [/위치도/]
+      }) || findAddress(source);
+
+    data.sido = normalizeSido(data.siteLocation);
+    data.sigungu = inferSigungu(data.siteLocation);
+
+    data.permitDate = dateAfterLabel(lines, [
+      "건축허가일",
+      "허가일",
+      "신고일",
+      "허가신고일"
+    ]);
+
+    data.approvalDate = dateAfterLabel(lines, [
+      "사용승인예정일",
+      "사용승인일",
+      "준공예정일",
+      "준공일"
+    ]);
+
+    data.mainUse = cleanupUse(
+      valueAfterLabel(lines, ["주용도", "주요용도", "건축물용도", "용도"], {
+        skip: [/용도지역/, /용도지구/, /용도구역/, /용도별/]
+      }) || findKnownUse(source, false)
+    );
+
+    data.totalArea = numberAfterLabel(lines, [
+      "연면적",
+      "총연면적",
+      "합계연면적",
+      "전체연면적"
+    ], {
+      skip: [/용적률산정용연면적/]
+    });
+
+    data.conditionedArea = numberAfterLabel(lines, [
+      "냉난방면적",
+      "냉방면적",
+      "난방면적",
+      "공조면적"
+    ]);
+
+    data.parkingArea = numberAfterLabel(lines, [
+      "주차장면적",
+      "지하주차장면적"
+    ]);
+
+    data.households = numberAfterLabel(lines, [
+      "세대수",
+      "가구수"
+    ]);
+
+    const scale = parseScale(source, lines);
+    data.floors = scale.floors;
+    data.basementFloors = scale.basementFloors;
+
+    data.useMix = parseUseMix(lines);
+
+    if (!data.useMix && data.mainUse && data.totalArea) {
+      data.useMix = data.mainUse + ", " + data.totalArea;
+    }
+
+    return data;
+  }
+
+  function normalizeYn(value) {
+    const source = text(value);
+
+    if (/^(예|y|yes|true)$/i.test(source)) return "예";
+    if (/^(아니오|아니요|n|no|false)$/i.test(source)) return "아니오";
+    if (/공공|국가|지방자치|공공기관|해당/.test(source)) return "예";
+    if (/민간|비해당/.test(source)) return "아니오";
+
+    return source;
+  }
+
+  function onlyNumber(value) {
+    const m = text(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+    return m ? m[0] : "";
+  }
+
+  function setValue(id, value) {
+    const node = $(id);
+
+    if (!node) return 0;
+    if (value === undefined || value === null || text(value) === "") return 0;
+
+    let next = text(value);
+
+    if (id === "sido") {
+      next = normalizeSido(next);
+    }
+
+    if (id === "publicYn") {
+      next = normalizeYn(next);
+    }
+
+    if (["totalArea", "conditionedArea", "parkingArea"].includes(id)) {
+      next = normalizeNumber(next);
+    }
+
+    if (["households", "floors", "basementFloors"].includes(id)) {
+      next = onlyNumber(next);
+    }
+
+    if (node.type === "date") {
+      next = normalizeDate(next);
+      if (!next) return 0;
+    }
+
+    if (node.tagName === "SELECT") {
+      const options = Array.from(node.options || []);
+      const normalizedNext = compact(next);
+
+      const hit =
+        options.find(function (opt) {
+          return text(opt.value) === next || text(opt.textContent) === next;
+        }) ||
+        options.find(function (opt) {
+          const ov = compact(opt.value);
+          const ot = compact(opt.textContent);
+
+          return (
+            normalizedNext &&
+            (
+              (ov && (normalizedNext.includes(ov) || ov.includes(normalizedNext))) ||
+              (ot && (normalizedNext.includes(ot) || ot.includes(normalizedNext)))
+            )
+          );
+        });
+
+      if (!hit) {
+        console.warn("[AUTO2] select option not found:", id, value);
+        return 0;
+      }
+
+      node.value = hit.value;
+    } else {
+      node.value = next;
+    }
+
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+
+    return 1;
+  }
+
+  function parseUseLine(line) {
+    const source = text(line);
+
+    if (!source) return null;
+
+    const m = source.match(/^(.*?)[,\t ]+(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:㎡|m2|m²)?$/i);
+
+    if (!m) return null;
+
+    return {
+      use: m[1].replace(/[,\s]+$/g, "").trim(),
+      area: m[2]
+    };
+  }
+
+  function renderUseTable(useMixText) {
+    const tbody = $("useRows");
+
+    if (!tbody || !useMixText) return;
+
+    const rows = text(useMixText)
+      .split(/\n+/)
+      .map(parseUseLine)
+      .filter(Boolean);
+
+    if (!rows.length) return;
+
+    tbody.innerHTML = rows
+      .map(function (row) {
+        return (
+          "<tr>" +
+          "<td>" + escHtml(row.use) + "</td>" +
+          "<td>" + escHtml(row.area) + "</td>" +
+          "<td>자동입력</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  function runAutoFill(event) {
+    if (event) {
+      event.preventDefault();
+
+      /*
+        중요:
+        여기서는 stopImmediatePropagation을 쓰지 않는다.
+        그래야 engine.js에 원래 붙어있는 자동입력 핸들러도 같이 실행될 수 있다.
+      */
+    }
+
+    const sourceNode = $("overviewText");
+    const source = sourceNode ? sourceNode.value : "";
+
+    if (!source.trim()) {
+      alert("먼저 OCR 결과 또는 건축개요 텍스트를 입력하세요.");
+      return;
+    }
+
+    try {
+      show("건축개요 직접 분석 중...");
+
+      const data = parseDirect(source);
+
+      window.__lastAutoFillV2 = data;
+      console.log("[AUTO2] direct parsed overview:", data);
+
+      let count = 0;
+
+      count += setValue("projectName", data.projectName);
+      count += setValue("projectType", data.projectType);
+      count += setValue("ownerType", data.ownerType);
+      count += setValue("publicYn", data.publicYn);
+      count += setValue("sido", data.sido);
+      count += setValue("sigungu", data.sigungu);
+      count += setValue("siteLocation", data.siteLocation);
+      count += setValue("permitDate", data.permitDate);
+      count += setValue("approvalDate", data.approvalDate);
+      count += setValue("mainUse", data.mainUse);
+      count += setValue("totalArea", data.totalArea);
+      count += setValue("conditionedArea", data.conditionedArea);
+      count += setValue("parkingArea", data.parkingArea);
+      count += setValue("households", data.households);
+      count += setValue("floors", data.floors);
+      count += setValue("basementFloors", data.basementFloors);
+
+      if (data.useMix) {
+        count += setValue("useMix", data.useMix);
+        renderUseTable(data.useMix);
+
+        const parseBtn = $("parseUseMixBtn");
+        if (parseBtn) {
+          setTimeout(function () {
+            parseBtn.click();
+          }, 0);
+        }
+      }
+
+      if (count > 0) {
+        show("건축개요 자동입력 완료: " + count + "개 항목 반영됨");
+      } else {
+        show("자동입력 실패: OCR 텍스트에서 인식 가능한 건축개요 항목을 찾지 못했습니다.");
+      }
+    } catch (err) {
+      console.error("[AUTO2] 자동입력 오류:", err);
+
+      const message = err && err.message ? err.message : String(err);
+      show("자동입력 오류: " + message);
+      alert("건축개요 자동입력 중 오류가 발생했습니다.\n\n" + message);
+    }
+  }
+
+  function bind() {
+    const btn = $("applyOverview");
+
+    if (!btn) {
+      show("자동입력 버튼 #applyOverview를 찾지 못했습니다.");
+      return;
+    }
+
+    btn.addEventListener("click", runAutoFill, false);
+
+    window.__autoFillV2Parse = parseDirect;
+
+    console.log("[AUTO2] bound", VERSION);
+    show("건축개요 자동입력 핫픽스 v2 준비 완료");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
 })();
 </script>
+
 </body>
 </html>
