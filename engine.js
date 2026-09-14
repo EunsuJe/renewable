@@ -1,11 +1,11 @@
 /* =========================================================================
  * engine.js — 입력 파싱 · 계산 · 리포트 렌더링
  * ========================================================================= */
-import * as T from "./tables.js?v=20260914";
-import { CERTIFICATIONS, CERT_SOURCE } from "./certifications.js?v=20260914";
-import { evaluateCert } from "./certRules.js?v=20260914";
-import { parseOverviewText } from "./autofill.js?v=20260914";
 
+import * as T from "./tables.js?v=20260914-applyfix1";
+import { CERTS } from "./certifications.js?v=20260914-applyfix1";
+import { evaluateCert, appendCommonNotes } from "./certRules.js?v=20260914-applyfix1";
+import { parseOverviewText } from "./autofill.js?v=20260914-applyfix1";
 const $ = (id) => document.getElementById(id);
 
 const num = (id) => {
@@ -348,7 +348,45 @@ function updateOwnerTypeGuess() {
   if (!guess.matched) {
     hint.textContent = "건축주·시행자명을 입력하면 발주주체 구분을 추정합니다(자동 확정되지 않음 — 반드시 아래에서 확정하세요).";
     return;
+  }<!-- App diagnostic loader -->
+<script type="module">
+(function () {
+  const VERSION = "20260914-applyfix1";
+
+  function show(message) {
+    const node = document.getElementById("ocrStatus");
+    if (node) node.textContent = message;
+    console.log("[APP]", message);
   }
+
+  window.addEventListener("error", function (event) {
+    const message = event.message || "알 수 없는 JS 오류";
+    show("JS 오류: " + message);
+    console.error("[APP ERROR]", event.error || event);
+  });
+
+  window.addEventListener("unhandledrejection", function (event) {
+    const reason = event.reason;
+    const message =
+      reason && reason.message ? reason.message : String(reason || "알 수 없는 Promise 오류");
+
+    show("JS Promise 오류: " + message);
+    console.error("[APP PROMISE ERROR]", reason);
+  });
+
+  import("./engine.js?v=" + VERSION)
+    .then(function () {
+      show("앱 준비 완료");
+      console.log("[APP] engine.js loaded");
+    })
+    .catch(function (err) {
+      const message = err && err.message ? err.message : String(err);
+      show("engine.js 로드 오류: " + message);
+      console.error("[APP] engine.js load failed", err);
+    });
+})();
+</script>
+
 
   hint.innerHTML = `추정: <b>${escHtml(guess.label)}</b> (근거: "${escHtml(guess.matched)}") — 정부출연기관·지방공기업은 상호명만으로 판별 불가하니 반드시 확인 후 확정하세요.`;
 }
@@ -969,3 +1007,41 @@ function run() {
 $("run")?.addEventListener("click", run);
 
 window.reTool = { ...T, run, collectCtx, parseUseMix };
+<!-- App diagnostic loader -->
+<script type="module">
+(function () {
+  const VERSION = "20260914-applyfix1";
+
+  function show(message) {
+    const node = document.getElementById("ocrStatus");
+    if (node) node.textContent = message;
+    console.log("[APP]", message);
+  }
+
+  window.addEventListener("error", function (event) {
+    const message = event.message || "알 수 없는 JS 오류";
+    show("JS 오류: " + message);
+    console.error("[APP ERROR]", event.error || event);
+  });
+
+  window.addEventListener("unhandledrejection", function (event) {
+    const reason = event.reason;
+    const message =
+      reason && reason.message ? reason.message : String(reason || "알 수 없는 Promise 오류");
+
+    show("JS Promise 오류: " + message);
+    console.error("[APP PROMISE ERROR]", reason);
+  });
+
+  import("./engine.js?v=" + VERSION)
+    .then(function () {
+      show("앱 준비 완료");
+      console.log("[APP] engine.js loaded");
+    })
+    .catch(function (err) {
+      const message = err && err.message ? err.message : String(err);
+      show("engine.js 로드 오류: " + message);
+      console.error("[APP] engine.js load failed", err);
+    });
+})();
+</script>
