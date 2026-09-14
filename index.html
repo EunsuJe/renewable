@@ -761,6 +761,309 @@
 
   <!-- Tesseract.js -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var OCR_LANG = "kor+eng";
+  var ocrWorkerPromise = null;
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function setOcrStatus(message) {
+    var node = el("ocrStatus");
+    if (node) node.textContent = message || "";
+    console.log("[OCR]", message || "");
+  }
+
+  function setOcrBusy(busy) {
+    var btn = el("ocrBtn");
+    if (!btn) return;
+
+    btn.disabled = !!busy;
+    btn.textContent = busy ? "OCR 처리 중..." : "PDF/OCR 읽기";
+  }
+
+  function appendOverviewText(text) {
+    var target = el("overviewText");
+    if (!target) {
+      throw new Error("#overviewText 요소를 찾을 수 없습니다.");
+    }
+
+    var cleaned = String(text || "").replace(/\r/g, "").trim();
+
+    if (!cleaned) {
+      setOcrStatus("인식된 텍스트가 없습니다.");
+      return;
+    }
+
+    target.value = target.value.trim()
+      ? target.value.trim() + "\n\n" + cleaned
+      : cleaned;
+
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function selectedFile() {
+    var input = el("pdfFile");
+
+    if (!input) {
+      throw new Error("#pdfFile 파일 입력 요소를 찾을 수 없습니다.");
+    }
+
+    if (!input.files || !input.files[0]) {
+      throw new Error("먼저 PDF 또는 이미지 파일을 선택하세요.");
+    }
+
+    return input.files[0];
+  }
+
+  async function createOcrWorker() {
+    if (!window.Tesseract) {
+      throw new Error(
+        "Tesseract.js가 로드되지 않았습니다. 인터넷 연결 또는 CDN 차단 여부를 확인하세요."
+      );
+    }
+
+    var logger = function (m) {
+      if (!m) return;
+
+      var progress =
+        typeof m.progress === "number"
+          ? " " + Math.round(m.progress * 100) + "%"
+          : "";
+
+      if (m.status) {
+        setOcrStatus("OCR 엔진: " + m.status + progress);
+      }
+    };
+
+    try {
+      // Tesseract.js v5 방식
+      return await window.Tesseract.createWorker(OCR_LANG, 1, {
+        logger: logger
+      });
+    } catch (primaryError) {
+      console.warn("[OCR] v5 worker 생성 실패. legacy 방식 재시도:", primaryError);
+
+      // 구버전 호환 방식
+      var worker = await window.Tesseract.createWorker({
+        logger: logger
+      });
+
+      if (typeof worker.loadLanguage === "function") {
+        await worker.loadLanguage(OCR_LANG);
+      }
+
+      if (typeof worker.initialize === "function") {
+        await worker.initialize(OCR_LANG);
+      }
+
+      return worker;
+    }
+  }
+
+  async function getOcrWorker() {
+    if (!ocrWorkerPromise) {
+      ocrWorkerPromise = createOcrWorker().catch(function (err) {
+        ocrWorkerPromise = null;
+        throw err;
+      });
+    }
+
+    return await ocrWorkerPromise;
+  }
+
+  async function recognizeSource(source, label) {
+    var worker = await getOcrWorker();
+
+    setOcrStatus((label || "파일") + " OCR 인식 중...");
+
+    var result = await worker.recognize(source);
+    return result && result.data && result.data.text
+      ? result.data.text
+      : "";
+  }
+
+  function normalizePdfTextItems(items) {
+    var out = "";
+
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      out += item.str || "";
+      out += item.hasEOL ? "\n" : " ";
+    }
+
+    return out
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+  }
+
+  async function renderPdfPageToCanvas(page) {
+    var viewport = page.getViewport({ scale: 2.0 });
+    var canvas = document.createElement("canvas");
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+
+    await page.render({
+      canvasContext: ctx,
+      viewport: viewport
+    }).promise;
+
+    return canvas;
+  }
+
+  async function readPdf(file) {
+    if (!window.pdfjsLib) {
+      throw new Error(
+        "PDF.js가 로드되지 않았습니다. 인터넷 연결 또는 CDN 차단 여부를 확인하세요."
+      );
+    }
+
+    setOcrStatus("PDF 여는 중...");
+
+    var buffer = await file.arrayBuffer();
+    var pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+    var pages = [];
+
+    for (var pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) {
+      setOcrStatus(
+        "PDF " + pageNo + "/" + pdf.numPages + "페이지 텍스트 추출 중..."
+      );
+
+      var page = await pdf.getPage(pageNo);
+      var nativeText = "";
+
+      try {
+        var textContent = await page.getTextContent();
+        nativeText = normalizePdfTextItems(textContent.items || []);
+      } catch (err) {
+        console.warn("[OCR] PDF 텍스트 추출 실패, OCR로 전환:", err);
+      }
+
+      // 텍스트 PDF면 OCR보다 직접 추출이 훨씬 빠름
+      if (nativeText.replace(/\s/g, "").length >= 30) {
+        pages.push("----- page " + pageNo + " -----\n" + nativeText);
+        continue;
+      }
+
+      setOcrStatus(
+        "PDF " + pageNo + "/" + pdf.numPages + "페이지 이미지 변환 중..."
+      );
+
+      var canvas = await renderPdfPageToCanvas(page);
+
+      var ocrText = await recognizeSource(
+        canvas,
+        "PDF " + pageNo + "/" + pdf.numPages + "페이지"
+      );
+
+      pages.push("----- page " + pageNo + " -----\n" + ocrText);
+
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    return pages.join("\n\n").trim();
+  }
+
+  async function readImage(file) {
+    var url = URL.createObjectURL(file);
+
+    try {
+      return await recognizeSource(url, file.name || "이미지");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function runOcrFromSelectedFile() {
+    try {
+      var file = selectedFile();
+
+      setOcrBusy(true);
+      setOcrStatus("파일 확인: " + file.name);
+
+      var isPdf =
+        file.type === "application/pdf" ||
+        /\.pdf$/i.test(file.name || "");
+
+      var isImage =
+        /^image\//i.test(file.type || "") ||
+        /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(file.name || "");
+
+      if (!isPdf && !isImage) {
+        throw new Error("PDF 또는 이미지 파일만 OCR 처리할 수 있습니다.");
+      }
+
+      var text = isPdf ? await readPdf(file) : await readImage(file);
+
+      appendOverviewText(text);
+
+      var charCount = text.replace(/\s/g, "").length.toLocaleString();
+      setOcrStatus(
+        "OCR 완료: 약 " +
+          charCount +
+          "자 인식됨. 이제 '건축개요 자동입력'을 누르세요."
+      );
+    } catch (err) {
+      console.error("[OCR 오류]", err);
+
+      var message = err && err.message ? err.message : String(err);
+      setOcrStatus("OCR 오류: " + message);
+
+      alert("OCR 처리 중 오류가 발생했습니다.\n\n" + message);
+    } finally {
+      setOcrBusy(false);
+    }
+  }
+
+  function bindOcrButton() {
+    var btn = el("ocrBtn");
+
+    if (!btn) {
+      console.warn("[OCR] #ocrBtn 버튼을 찾지 못했습니다.");
+      return;
+    }
+
+    // 기존 engine.js 쪽 OCR 이벤트가 꼬여 있어도 이 핸들러가 우선 실행되게 capture 사용
+    btn.addEventListener(
+      "click",
+      function (event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        runOcrFromSelectedFile();
+      },
+      true
+    );
+
+    setOcrStatus("OCR 준비 완료");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindOcrButton);
+  } else {
+    bindOcrButton();
+  }
+
+  window.addEventListener("beforeunload", function () {
+    if (ocrWorkerPromise) {
+      ocrWorkerPromise
+        .then(function (worker) {
+          if (worker && typeof worker.terminate === "function") {
+            return worker.terminate();
+          }
+        })
+        .catch(function () {});
+    }
+  });
+})();
+</script>
 
   <!-- App -->
   <script type="module" src="./engine.js?v=20260914"></script>
