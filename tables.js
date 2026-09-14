@@ -66,7 +66,23 @@ export const USE_ALIAS = {
   "오피스텔": "업무시설", "사무소": "업무시설", "공공청사": "업무시설",
   "학교": "교육연구시설", "연구소": "교육연구시설",
   "병원": "의료시설",
-  "그 밖의 건축물": "업무시설"
+  "그 밖의 건축물": "업무시설",
+  "아파트": "공동주택",
+  "연립주택": "공동주택",
+  "다세대주택": "공동주택",
+  "주거": "공동주택",
+  "주상복합": "공동주택",
+  "주상복합아파트": "공동주택",
+  "도시형생활주택": "공동주택",
+
+  "문화및집회시설": "문화 및 집회시설",
+  "문화및집회 시설": "문화 및 집회시설",
+  "교정및군사시설": "교정 및 군사시설",
+  "판매및영업시설": "판매 및 영업시설",
+  "교육연구 시설": "교육연구시설",
+  "노유자 시설": "노유자시설",
+  "방송통신 시설": "방송통신시설"
+
 };
 
 /* -------------------- 2. 용도별 단위에너지사용량 [kWh/㎡·yr] (표1) */
@@ -352,12 +368,25 @@ export const LOCAL_STANDARD = {
   zebExemptRegions: ["서울", "인천", "부산", "고양", "제주", "세종"]
 };
 
+
 export const SIDO_TO_KEY = {
-  "서울특별시":"서울","부산광역시":"부산","대구광역시":"대구","인천광역시":"인천",
-  "광주광역시":"광주","대전광역시":"대전","울산광역시":"울산","세종특별자치시":"세종",
-  "경기도":"경기","경상남도":"경남","충청남도":"충남","제주특별자치도":"제주",
-  "강원특별자치도":"그 외 지역","충청북도":"그 외 지역","전북특별자치도":"그 외 지역",
-  "전라남도":"그 외 지역","경상북도":"그 외 지역"
+  "서울특별시":"서울", "서울시":"서울", "서울":"서울",
+  "부산광역시":"부산", "부산시":"부산", "부산":"부산",
+  "대구광역시":"대구", "대구시":"대구", "대구":"대구",
+  "인천광역시":"인천", "인천시":"인천", "인천":"인천",
+  "광주광역시":"광주", "광주시":"광주", "광주":"광주",
+  "대전광역시":"대전", "대전시":"대전", "대전":"대전",
+  "울산광역시":"울산", "울산시":"울산", "울산":"울산",
+  "세종특별자치시":"세종", "세종시":"세종", "세종":"세종",
+  "경기도":"경기", "경기":"경기",
+  "경상남도":"경남", "경남":"경남",
+  "충청남도":"충남", "충남":"충남",
+  "제주특별자치도":"제주", "제주도":"제주", "제주":"제주",
+  "강원특별자치도":"그 외 지역", "강원도":"그 외 지역", "강원":"그 외 지역",
+  "충청북도":"그 외 지역", "충북":"그 외 지역",
+  "전북특별자치도":"그 외 지역", "전라북도":"그 외 지역", "전북":"그 외 지역",
+  "전라남도":"그 외 지역", "전남":"그 외 지역",
+  "경상북도":"그 외 지역", "경북":"그 외 지역"
 };
 
 export const SIGUNGU_OVERRIDE = { "경기": { "고양": "고양" } };
@@ -646,10 +675,14 @@ export const DONATION_RULE = {
 };
 
 /* ========================= 14. 헬퍼 함수 ========================= */
-export const normUse    = (u) => USE_ALIAS[String(u ?? "").trim()] ?? String(u ?? "").trim();
+export const normUse = (u) => {
+  const raw = String(u ?? "").trim();
+  const compact = raw.replace(/\s+/g, "");
+  return USE_ALIAS[raw] ?? USE_ALIAS[compact] ?? raw;
+};
+
 export const normRegion = (r) => REGION_FACTOR.alias[String(r ?? "").trim()] ?? String(r ?? "").trim();
 
-/** 용도 → 부문 자동 산출 */
 export function resolveSector(use, clientType = "private") {
   const u = normUse(use);
   const s = USE_SECTOR[u];
@@ -657,54 +690,78 @@ export function resolveSector(use, clientType = "private") {
   return typeof s === "string" ? s : (clientType === "public" ? s.public : s.private);
 }
 
-/** 입력 부문 검증 + 자동 보정 (중단 대신 보정) */
 export function resolveSectorSafe(use, inputSector, clientType = "private") {
   const u = normUse(use);
   const inSec = String(inputSector ?? "").trim();
-  if (inSec && UNIT_ENERGY.data[inSec]?.[u] != null) return { use: u, sector: inSec, note: null };
+
+  if (inSec && UNIT_ENERGY.data[inSec]?.[u] != null) {
+    return { use: u, sector: inSec, note: null };
+  }
 
   const auto = resolveSector(u, clientType);
-  if (!auto || UNIT_ENERGY.data[auto]?.[u] == null)
-    throw new Error(`단위에너지사용량 없음: 용도="${u}" (표1 미등재)`);
 
-  return { use: u, sector: auto,
-    note: inSec ? `부문 자동보정: "${inSec}" → "${auto}" (표1 기준, 발주주체와 무관)` : null };
+  if (!auto || UNIT_ENERGY.data[auto]?.[u] == null) {
+    throw new Error(`단위에너지사용량 없음: 용도="${u}" (표1 미등재)`);
+  }
+
+  return {
+    use: u,
+    sector: auto,
+    note: inSec ? `부문 자동보정: "${inSec}" → "${auto}" (표1 기준, 발주주체와 무관)` : null
+  };
 }
 
 export function getUnitEnergy(use, clientType = "private", inputSector = null) {
   const u = normUse(use);
-  if (u === "공동주택" || u === "주거") return { value: UNIT_ENERGY.RESIDENTIAL_DEFAULT, sector: "주거", note: null };
+
+  if (u === "공동주택" || u === "주거") {
+    return { value: UNIT_ENERGY.RESIDENTIAL_DEFAULT, sector: "주거", note: null };
+  }
+
   const r = resolveSectorSafe(u, inputSector, clientType);
   return { value: UNIT_ENERGY.data[r.sector][r.use], sector: r.sector, note: r.note };
 }
 
-/** 강원 영서/영동 분리 포함 지역키 산출 */
 export function regionKeyFor(sido, sigungu = "") {
   if (String(sido).startsWith("강원")) {
     const gu = String(sigungu).replace(/(시|군)$/, "").trim();
     return GANGWON_YEONGDONG.includes(gu) ? "강원영동" : "강원영서";
   }
+
   return normRegion(sido);
 }
 
 export function getRegionFactor(sido, sigungu = "") {
   const key = regionKeyFor(sido, sigungu);
   const v = REGION_FACTOR.data[key];
+
   if (v == null) throw new Error(`지역계수 조회 실패: "${sido}"`);
+
   return { value: v, key };
 }
 
-/** 시·도 + 시·군·구 → 지자체 설계기준 */
+export function normalizeSigunguForOverride(sigungu) {
+  const s = String(sigungu ?? "").trim();
+  const first = s.match(/[가-힣]+(?:특례시|시|군|구)/)?.[0] ?? s;
+  return first.replace(/(특례시|시|군|구)$/g, "").trim();
+}
+
 export function resolveLocalStandard(sido, sigungu = "") {
   const base = SIDO_TO_KEY[String(sido).trim()] ?? "그 외 지역";
-  const gu = String(sigungu).replace(/(특례시|시|군|구)$/g, "").trim();
+  const gu = normalizeSigunguForOverride(sigungu);
   const key = SIGUNGU_OVERRIDE[base]?.[gu] ?? base;
-  return { key, std: LOCAL_STANDARD.data[key], fallback: key === "그 외 지역" };
+
+  return {
+    key,
+    std: LOCAL_STANDARD.data[key],
+    fallback: key === "그 외 지역"
+  };
 }
 
 export function getLocalTier(sido, sigungu, households, opts = {}) {
   const { key, std } = resolveLocalStandard(sido, sigungu);
   const tier = [...std.tiers].sort((a, b) => b.hh - a.hh).find(t => households >= t.hh) ?? null;
+
   if (!tier) return { key, std, tier: null, re: null };
 
   let re = tier.re;
@@ -714,19 +771,27 @@ export function getLocalTier(sido, sigungu, households, opts = {}) {
   let energy = tier.energy;
   if (opts.zebCertified && std.zebExempt?.energy) energy = null;
 
-  return { key, std, revision: std.revision, tier: tier.tier, green: tier.green,
-           energy, re, capacityRatio: tier.capacityRatio ?? null,
-           recommend: !!std.recommend, notes: std.notes ?? [], verify: !!std.verify };
+  return {
+    key,
+    std,
+    revision: std.revision,
+    tier: tier.tier,
+    green: tier.green,
+    energy,
+    re,
+    capacityRatio: tier.capacityRatio ?? null,
+    recommend: !!std.recommend,
+    notes: std.notes ?? [],
+    verify: !!std.verify
+  };
 }
 
-/** 신재생 생산량 [kWh] = 설치규모 × 단위생산량 × 원별보정계수 */
 export function reProduction(sourceKey, size) {
   const s = RE_SOURCE.data[sourceKey];
   if (!s) throw new Error(`신재생에너지원 조회 실패: "${sourceKey}"`);
   return size * s.prod * s.k;
 }
 
-/** 목표 생산량 충족에 필요한 설치규모 */
 export function requiredSize(sourceKey, targetKwh) {
   const s = RE_SOURCE.data[sourceKey];
   if (!s) throw new Error(`신재생에너지원 조회 실패: "${sourceKey}"`);
@@ -740,20 +805,29 @@ export function publicRatio(year) {
 
 export function zebGrade({ selfSufficiency = null, primary = null, isResidential = false }) {
   const key = isResidential ? "primaryResi" : "primaryNonResi";
+  const ss = selfSufficiency == null || selfSufficiency === "" ? null : Number(selfSufficiency);
+  const pe = primary == null || primary === "" ? null : Number(primary);
+
   for (const g of ZEB.grades) {
-    const bySelf = selfSufficiency != null && selfSufficiency >= g.selfSufficiency;
-    const byPrim = primary != null && primary > 0 && primary < g[key];
+    const bySelf = Number.isFinite(ss) && ss >= g.selfSufficiency;
+    const byPrim = Number.isFinite(pe) && pe <= g[key];
+
     if (bySelf || byPrim) return g.grade;
   }
+
   return null;
 }
 
 export function estimateSelfSufficiency(items, expected) {
+  const e = Number(expected);
+  if (!Number.isFinite(e) || e <= 0) return 0;
+
   return items.reduce((sum, it) => {
-    const supply = reProduction(it.sourceKey, it.size) / expected * 100;
+    const supply = reProduction(it.sourceKey, it.size) / e * 100;
     return sum + supply * (ZEB.planningFactor[it.sourceKey] ?? 1);
   }, 0);
 }
+
 
 export function greenHomePv(exclusiveArea) {
   return exclusiveArea * GREEN_HOME.pvRule.coef;
