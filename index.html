@@ -1064,8 +1064,436 @@
   });
 })();
 </script>
+<script type="module">
+(function () {
+  "use strict";
 
-  <!-- App -->
-  <script type="module" src="./engine.js?v=20260914"></script>
+  const VERSION = "20260914-applyfix1";
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function show(message) {
+    const node = $("ocrStatus");
+    if (node) node.textContent = message;
+    console.log("[AUTO]", message);
+  }
+
+  function text(value) {
+    return value === undefined || value === null ? "" : String(value).trim();
+  }
+
+  function isEmpty(value) {
+    if (value === undefined || value === null) return true;
+    if (Array.isArray(value)) return value.length === 0;
+    return text(value) === "";
+  }
+
+  function compact(value) {
+    return text(value)
+      .replace(/\s+/g, "")
+      .replace(/[·ㆍ]/g, "")
+      .toLowerCase();
+  }
+
+  function poolsOf(obj) {
+    return [obj, obj && obj.fields, obj && obj.overview, obj && obj.data, obj && obj.result]
+      .filter(Boolean);
+  }
+
+  function getAny(obj, keys) {
+    const pools = poolsOf(obj);
+
+    for (const pool of pools) {
+      for (const key of keys) {
+        if (
+          Object.prototype.hasOwnProperty.call(pool, key) &&
+          !isEmpty(pool[key])
+        ) {
+          return pool[key];
+        }
+      }
+    }
+
+    return "";
+  }
+
+  function normalizeDate(value) {
+    const source = text(value);
+    if (!source) return "";
+
+    const m = source.match(/((?:19|20)\d{2})\D{0,4}(\d{1,2})\D{0,4}(\d{1,2})/);
+    if (!m) return "";
+
+    return [
+      m[1],
+      String(m[2]).padStart(2, "0"),
+      String(m[3]).padStart(2, "0")
+    ].join("-");
+  }
+
+  function normalizeNumber(value) {
+    if (typeof value === "number") return String(value);
+
+    return text(value)
+      .replace(/㎡|m²|m2|제곱미터/gi, "")
+      .trim();
+  }
+
+  function onlyNumber(value) {
+    const m = text(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+    return m ? m[0] : "";
+  }
+
+  function normalizeYn(value) {
+    const source = text(value);
+
+    if (value === true) return "예";
+    if (value === false) return "아니오";
+
+    if (/^(예|y|yes|true)$/i.test(source)) return "예";
+    if (/^(아니오|아니요|n|no|false)$/i.test(source)) return "아니오";
+
+    if (/공공|국가|지방자치|공공기관/.test(source)) return "예";
+    if (/민간/.test(source)) return "아니오";
+
+    return source;
+  }
+
+  function normalizeSido(value) {
+    const source = text(value);
+
+    const rules = [
+      [/서울/, "서울특별시"],
+      [/부산/, "부산광역시"],
+      [/대구/, "대구광역시"],
+      [/인천/, "인천광역시"],
+      [/광주/, "광주광역시"],
+      [/대전/, "대전광역시"],
+      [/울산/, "울산광역시"],
+      [/세종/, "세종특별자치시"],
+      [/경기/, "경기도"],
+      [/강원/, "강원특별자치도"],
+      [/충북|충청북/, "충청북도"],
+      [/충남|충청남/, "충청남도"],
+      [/전북|전라북/, "전북특별자치도"],
+      [/전남|전라남/, "전라남도"],
+      [/경북|경상북/, "경상북도"],
+      [/경남|경상남/, "경상남도"],
+      [/제주/, "제주특별자치도"]
+    ];
+
+    for (const [regex, canonical] of rules) {
+      if (regex.test(source)) return canonical;
+    }
+
+    return source;
+  }
+
+  function setValue(id, value) {
+    const node = $(id);
+    if (!node || isEmpty(value)) return 0;
+
+    let next = text(value);
+
+    if (id === "sido") {
+      next = normalizeSido(next);
+    }
+
+    if (id === "publicYn") {
+      next = normalizeYn(next);
+    }
+
+    if (["totalArea", "conditionedArea", "parkingArea"].includes(id)) {
+      next = normalizeNumber(next);
+    }
+
+    if (["households", "floors", "basementFloors"].includes(id)) {
+      next = onlyNumber(next);
+    }
+
+    if (node.type === "date") {
+      next = normalizeDate(next);
+      if (!next) return 0;
+    }
+
+    if (node.tagName === "SELECT") {
+      const options = Array.from(node.options || []);
+      const normalizedNext = compact(next);
+
+      const hit =
+        options.find((opt) => text(opt.value) === next || text(opt.textContent) === next) ||
+        options.find((opt) => {
+          const ov = compact(opt.value);
+          const ot = compact(opt.textContent);
+
+          return (
+            (ov && (normalizedNext.includes(ov) || ov.includes(normalizedNext))) ||
+            (ot && (normalizedNext.includes(ot) || ot.includes(normalizedNext)))
+          );
+        });
+
+      if (!hit) {
+        console.warn("[AUTO] select option not found:", id, value);
+        return 0;
+      }
+
+      node.value = hit.value;
+    } else {
+      node.value = next;
+    }
+
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+
+    return 1;
+  }
+
+  function useMixToText(data) {
+    const raw = getAny(data, [
+      "useMixText",
+      "useMixRaw",
+      "useMix",
+      "useRows",
+      "uses",
+      "useAreas",
+      "용도별면적",
+      "용도별면적텍스트"
+    ]);
+
+    if (typeof raw === "string") {
+      return raw.trim();
+    }
+
+    if (Array.isArray(raw)) {
+      return raw
+        .map((row) => {
+          if (typeof row === "string") return row;
+
+          const use = text(
+            row.use ??
+            row.name ??
+            row.label ??
+            row.type ??
+            row.mainUse ??
+            row["용도"]
+          );
+
+          const area = text(
+            row.area ??
+            row.areaM2 ??
+            row.m2 ??
+            row.value ??
+            row["면적"]
+          );
+
+          return use && area ? `${use}, ${area}` : "";
+        })
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    return "";
+  }
+
+  function escHtml(value) {
+    return text(value).replace(/[&<>"']/g, function (ch) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[ch];
+    });
+  }
+
+  function parseUseLine(line) {
+    const source = text(line);
+    if (!source) return null;
+
+    const m = source.match(/^(.*?)[,\t ]+(-?\d[\d,]*(?:\.\d+)?)\s*(?:㎡|m2|m²)?$/i);
+    if (!m) return null;
+
+    return {
+      use: m[1].replace(/[,\s]+$/g, "").trim(),
+      area: m[2]
+    };
+  }
+
+  function renderUseTable(useMixText) {
+    const tbody = $("useRows");
+    if (!tbody || !useMixText) return;
+
+    const rows = String(useMixText)
+      .split(/\n+/)
+      .map(parseUseLine)
+      .filter(Boolean);
+
+    if (!rows.length) return;
+
+    tbody.innerHTML = rows
+      .map((row) => {
+        return `
+          <tr>
+            <td>${escHtml(row.use)}</td>
+            <td>${escHtml(row.area)}</td>
+            <td>자동입력</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  async function loadParser() {
+    const mod = await import("./autofill.js?v=" + VERSION);
+
+    const fn =
+      mod.parseOverviewText ||
+      (typeof mod.default === "function" ? mod.default : null) ||
+      (mod.default && mod.default.parseOverviewText);
+
+    if (typeof fn !== "function") {
+      throw new Error("autofill.js에서 parseOverviewText 함수를 찾지 못했습니다.");
+    }
+
+    return fn;
+  }
+
+  async function runAutoFill(event) {
+    event.preventDefault();
+
+    // engine.js 쪽 자동입력 핸들러가 죽어 있어도 이 보강 핸들러가 우선 작동하게 함
+    event.stopImmediatePropagation();
+
+    try {
+      const source = $("overviewText") ? $("overviewText").value : "";
+
+      if (!source.trim()) {
+        alert("먼저 OCR 결과 또는 건축개요 텍스트를 입력하세요.");
+        return;
+      }
+
+      show("건축개요 분석 중...");
+
+      const parseOverviewText = await loadParser();
+      const data = await parseOverviewText(source);
+
+      console.log("[AUTO] parsed overview:", data);
+
+      if (!data || typeof data !== "object") {
+        throw new Error("건축개요 분석 결과가 비어 있습니다.");
+      }
+
+      let count = 0;
+
+      count += setValue("projectName", getAny(data, ["projectName", "name", "title", "사업명", "공사명"]));
+      count += setValue("projectType", getAny(data, ["projectType", "workType", "constructionType", "사업구분", "건축구분"]));
+
+      const ownerType = getAny(data, ["ownerType", "owner", "clientType", "발주구분", "공공민간"]);
+      count += setValue("ownerType", ownerType);
+
+      const publicYn = getAny(data, ["publicYn", "isPublic", "public", "공공건축물여부"]);
+      if (!isEmpty(publicYn)) {
+        count += setValue("publicYn", publicYn);
+      } else if (/공공|국가|지방자치|공공기관/.test(text(ownerType))) {
+        count += setValue("publicYn", "예");
+      }
+
+      count += setValue("sido", getAny(data, ["sido", "province", "시도"]));
+      count += setValue("sigungu", getAny(data, ["sigungu", "city", "district", "시군구"]));
+      count += setValue("siteLocation", getAny(data, ["siteLocation", "address", "location", "대지위치", "위치"]));
+
+      count += setValue("permitDate", getAny(data, ["permitDate", "permitAt", "permit", "허가일", "신고일", "건축허가일"]));
+      count += setValue("approvalDate", getAny(data, ["approvalDate", "useApprovalDate", "completionDate", "사용승인예정일", "준공예정일"]));
+
+      count += setValue("mainUse", getAny(data, ["mainUse", "use", "primaryUse", "주용도", "용도"]));
+      count += setValue("totalArea", getAny(data, ["totalArea", "grossArea", "totalFloorArea", "연면적"]));
+      count += setValue("conditionedArea", getAny(data, ["conditionedArea", "heatedCooledArea", "냉난방면적"]));
+      count += setValue("parkingArea", getAny(data, ["parkingArea", "parking", "주차장면적"]));
+
+      count += setValue("households", getAny(data, ["households", "householdCount", "세대수"]));
+      count += setValue("floors", getAny(data, ["floors", "groundFloors", "aboveGroundFloors", "지상층수"]));
+      count += setValue("basementFloors", getAny(data, ["basementFloors", "undergroundFloors", "지하층수"]));
+
+      const useMixText = useMixToText(data);
+      if (useMixText) {
+        count += setValue("useMix", useMixText);
+        renderUseTable(useMixText);
+      }
+
+      if (count > 0) {
+        show(`건축개요 자동입력 완료: ${count}개 항목 반영됨`);
+      } else {
+        show("분석은 완료됐지만 반영할 항목을 찾지 못했습니다. Console의 [AUTO] parsed overview 결과를 확인하세요.");
+      }
+    } catch (err) {
+      console.error("[AUTO] 자동입력 오류:", err);
+
+      const message = err && err.message ? err.message : String(err);
+      show("자동입력 오류: " + message);
+      alert("건축개요 자동입력 중 오류가 발생했습니다.\n\n" + message);
+    }
+  }
+
+  function bind() {
+    const btn = $("applyOverview");
+
+    if (!btn) {
+      show("자동입력 버튼 #applyOverview를 찾지 못했습니다.");
+      return;
+    }
+
+    btn.addEventListener("click", runAutoFill, true);
+    console.log("[AUTO] applyOverview fallback bound");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
+})();
+</script>
+
+<!-- App diagnostic loader -->
+<script type="module">
+(function () {
+  const VERSION = "20260914-applyfix1";
+
+  function show(message) {
+    const node = document.getElementById("ocrStatus");
+    if (node) node.textContent = message;
+    console.log("[APP]", message);
+  }
+
+  window.addEventListener("error", function (event) {
+    const message = event.message || "알 수 없는 JS 오류";
+    show("JS 오류: " + message);
+    console.error("[APP ERROR]", event.error || event);
+  });
+
+  window.addEventListener("unhandledrejection", function (event) {
+    const reason = event.reason;
+    const message =
+      reason && reason.message ? reason.message : String(reason || "알 수 없는 Promise 오류");
+
+    show("JS Promise 오류: " + message);
+    console.error("[APP PROMISE ERROR]", reason);
+  });
+
+  import("./engine.js?v=" + VERSION)
+    .then(function () {
+      show("앱 준비 완료");
+      console.log("[APP] engine.js loaded");
+    })
+    .catch(function (err) {
+      const message = err && err.message ? err.message : String(err);
+      show("engine.js 로드 오류: " + message);
+      console.error("[APP] engine.js load failed", err);
+    });
+})();
+</script>
 </body>
 </html>
